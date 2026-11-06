@@ -18,7 +18,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${chivoMono.variable} h-full`}>
-      <body className="min-h-full font-sans">{children}</body>
+      {/* suppressHydrationWarning: browser extensions may inject attributes on <body> before React hydrates */}
+      <body className="min-h-full font-sans" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }
