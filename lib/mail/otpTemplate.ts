@@ -29,29 +29,44 @@ function digitCells(code: string): string {
     .join("");
 }
 
-export function otpEmailSubject(): string {
-  return "Your TransitIQ verification code";
+export type OtpMailKind = "signup" | "reset";
+
+export function otpEmailSubject(kind: OtpMailKind = "signup"): string {
+  return kind === "reset"
+    ? "Reset your TransitIQ password"
+    : "Your TransitIQ verification code";
 }
 
-export function otpEmailText(code: string): string {
+export function otpEmailText(code: string, kind: OtpMailKind = "signup"): string {
+  const action =
+    kind === "reset"
+      ? "Use this code to set a new TransitIQ password."
+      : "Use this code to finish signing in to TransitIQ.";
   return [
     "TransitIQ",
     "",
     `Your verification code is: ${code}`,
     "",
+    action,
     "This code expires in 10 minutes.",
     "If you did not request this, ignore this email.",
   ].join("\n");
 }
 
-export function otpEmailHtml(code: string): string {
+export function otpEmailHtml(code: string, kind: OtpMailKind = "signup"): string {
   const safeCode = escapeHtml(code);
+  const kicker = kind === "reset" ? "Password reset" : "Fleet owner verification";
+  const heading = kind === "reset" ? "Reset your password" : "Your verification code";
+  const body =
+    kind === "reset"
+      ? "Use this code to choose a new password for your TransitIQ account. It works once and expires in 10 minutes."
+      : "Use this code to finish signing in to TransitIQ. It works once and expires in 10 minutes.";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${otpEmailSubject()}</title>
+  <title>${otpEmailSubject(kind)}</title>
 </head>
 <body style="margin:0;padding:0;background:${PAPER};color:${INK};font-family:Arial,Helvetica,sans-serif;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
@@ -79,13 +94,13 @@ export function otpEmailHtml(code: string): string {
                 </tr>
                 <tr>
                   <td style="padding:32px 32px 8px 32px;">
-                    <p style="margin:0 0 6px 0;font-size:13px;color:${MUTED};">Fleet owner verification</p>
-                    <h1 style="margin:0;font-size:22px;line-height:1.3;color:${INK};font-weight:800;">Your verification code</h1>
+                    <p style="margin:0 0 6px 0;font-size:13px;color:${MUTED};">${kicker}</p>
+                    <h1 style="margin:0;font-size:22px;line-height:1.3;color:${INK};font-weight:800;">${heading}</h1>
                   </td>
                 </tr>
                 <tr>
                   <td style="padding:8px 32px 24px 32px;font-size:15px;line-height:1.55;color:${MUTED};">
-                    Use this code to finish signing in to TransitIQ. It works once and expires in 10 minutes.
+                    ${body}
                   </td>
                 </tr>
                 <tr>

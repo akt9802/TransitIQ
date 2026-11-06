@@ -32,5 +32,9 @@ export async function ensureAuthSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_email_otps_expires ON email_otps(expires_at);
   `);
 
+  await pool.query(
+    `ALTER TABLE email_otps ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'signup'`
+  );
+
   schemaReady = true;
 }

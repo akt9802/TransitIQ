@@ -15,8 +15,9 @@ export async function POST(req: Request) {
     }
 
     let email: string;
+    let purpose: "signup" | "reset";
     try {
-      ({ email } = verifyOtpToken(token));
+      ({ email, purpose } = verifyOtpToken(token));
     } catch {
       return NextResponse.json({ error: "OTP session expired — request a new code" }, { status: 401 });
     }
@@ -35,15 +36,27 @@ export async function POST(req: Request) {
 
     const hash = await bcrypt.hash(password, 12);
 
-    const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO fleet_users (email, password_hash)
-       VALUES ($1, $2)
-       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = now()
-       RETURNING id`,
-      [email, hash]
-    );
+    let userId: string | undefined;
+    if (purpose === "reset") {
+      const { rows } = await pool.query<{ id: string }>(
+        `UPDATE fleet_users SET password_hash = $1, updated_at = now() WHERE email = $2 RETURNING id`,
+        [hash, email]
+      );
+      userId = rows[0]?.id;
+      if (!userId) {
+        return NextResponse.json({ error: "No account found for this email" }, { status: 400 });
+      }
+    } else {
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO fleet_users (email, password_hash)
+         VALUES ($1, $2)
+         ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = now()
+         RETURNING id`,
+        [email, hash]
+      );
+      userId = rows[0]?.id;
+    }
 
-    const userId = rows[0]?.id;
     if (!userId) {
       return NextResponse.json({ error: "Could not save user" }, { status: 500 });
     }

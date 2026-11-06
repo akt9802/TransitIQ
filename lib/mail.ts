@@ -36,7 +36,11 @@ function getTransport() {
 
 export type SendOtpResult = { delivered: boolean; error?: string };
 
-export async function sendOtpEmail(to: string, code: string): Promise<SendOtpResult> {
+export async function sendOtpEmail(
+  to: string,
+  code: string,
+  kind: "signup" | "reset" = "signup"
+): Promise<SendOtpResult> {
   const from = process.env.SMTP_FROM_EMAIL ?? "noreply@transitiq.local";
   const name = process.env.SMTP_FROM_NAME ?? "TransitIQ";
 
@@ -45,9 +49,9 @@ export async function sendOtpEmail(to: string, code: string): Promise<SendOtpRes
     await transport.sendMail({
       from: `"${name}" <${from}>`,
       to,
-      subject: otpEmailSubject(),
-      text: otpEmailText(code),
-      html: otpEmailHtml(code),
+      subject: otpEmailSubject(kind),
+      text: otpEmailText(code, kind),
+      html: otpEmailHtml(code, kind),
     });
     return { delivered: true };
   } catch (e) {
