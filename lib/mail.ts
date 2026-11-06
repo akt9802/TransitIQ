@@ -41,17 +41,23 @@ export async function sendOtpEmail(
   code: string,
   kind: "signup" | "reset" = "signup"
 ): Promise<SendOtpResult> {
-  const from = process.env.SMTP_FROM_EMAIL ?? "noreply@transitiq.local";
+  const from = process.env.SMTP_FROM_EMAIL ?? "noreply@akt9802.in";
   const name = process.env.SMTP_FROM_NAME ?? "TransitIQ";
+  const replyTo = process.env.SMTP_REPLY_TO?.trim() || from;
 
   const transport = getTransport();
   try {
     await transport.sendMail({
       from: `"${name}" <${from}>`,
+      replyTo,
       to,
       subject: otpEmailSubject(kind),
       text: otpEmailText(code, kind),
       html: otpEmailHtml(code, kind),
+      headers: {
+        "Auto-Submitted": "auto-generated",
+        "X-Auto-Response-Suppress": "All",
+      },
     });
     return { delivered: true };
   } catch (e) {

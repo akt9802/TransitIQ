@@ -49,6 +49,7 @@ export function otpEmailText(code: string, kind: OtpMailKind = "signup"): string
     "",
     action,
     "This code expires in 10 minutes.",
+    "This is an automated no-reply message. Do not reply to this email.",
     "If you did not request this, ignore this email.",
   ].join("\n");
 }
@@ -104,11 +105,16 @@ export function otpEmailHtml(code: string, kind: OtpMailKind = "signup"): string
                   </td>
                 </tr>
                 <tr>
-                  <td align="center" style="padding:0 24px 28px 24px;">
+                  <td align="center" style="padding:0 24px 12px 24px;">
                     <table role="presentation" cellpadding="0" cellspacing="0">
-                      <tr>${digitCells(code)}</tr>
+                      <tr>
+                        ${digitCells(code)}
+                      </tr>
                     </table>
-                    <p style="margin:14px 0 0 0;font-size:12px;color:${MUTED};">Code: <strong style="color:${INK};letter-spacing:3px;font-family:'Courier New',Courier,monospace;">${safeCode}</strong></p>
+                    <p style="margin:14px 0 0 0;font-size:12px;color:${MUTED};">
+                      Code:
+                      <strong style="color:${INK};letter-spacing:3px;font-family:'Courier New',Courier,monospace;">${safeCode}</strong>
+                    </p>
                   </td>
                 </tr>
                 <tr>
@@ -128,6 +134,8 @@ export function otpEmailHtml(code: string, kind: OtpMailKind = "signup"): string
           </tr>
           <tr>
             <td style="padding:18px 4px 0 4px;font-size:12px;line-height:1.5;color:${MUTED};">
+              This is an automated message from a no-reply address. Replies are not read.
+              <br>
               If you did not request this code, you can ignore this email. Your account stays unchanged.
               <br><br>
               TransitIQ · fleet control and road safety
