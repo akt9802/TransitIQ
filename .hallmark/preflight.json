@@ -1,0 +1,18 @@
+{
+  "scanned": "2026-11-06",
+  "findings": {
+    "fonts": "none yet; Chivo Mono introduced via next/font for Wayfind",
+    "palette": "none; Next.js default zinc/black template discarded",
+    "motion": "none",
+    "spacing": "none; Hallmark scale introduced",
+    "framework": "Next.js 16 App Router, Tailwind 4, TypeScript (new app)"
+  },
+  "preserve": [],
+  "introduce": [
+    "Wayfind tokens",
+    "app-screen shell",
+    "live fleet map signature",
+    "sample operational records"
+  ],
+  "notes": "No design.md, no brand spec, no running product. Product material from Docs/first.md only. No Inspo MCP. TOGETHER_API_KEY unset."
+}

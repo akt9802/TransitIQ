@@ -1,0 +1,58 @@
+[
+ {
+  "scope": "app",
+  "shape": "app screen",
+  "theme": "Wayfind",
+  "axes": "light/mono/cool",
+  "hero": "none",
+  "nav": "dense top bar, wordmark, status filter, one assign action",
+  "footer": "none",
+  "imagery": "none",
+  "photos": [],
+  "entry": "live fleet corridor",
+  "fingerprint": "app-screen/wayfind/map-board-alerts/platform",
+  "sections": [
+   "topbar",
+   "corridor map",
+   "alert rail",
+   "truck board"
+  ],
+  "signature": "live truck map as a departure board",
+  "waived": [],
+  "prompt": "TransitIQ fleet manager dashboard live truck map",
+  "data": "sample",
+  "date": "2026-11-06",
+  "mode": "build"
+ },
+ {
+  "scope": "page",
+  "shape": "Workbench",
+  "theme": "Wayfind",
+  "axes": "light/mono/cool",
+  "hero": "Stage",
+  "posture": "committed",
+  "job": "sign up",
+  "nav": "edge-aligned, wordmark left one action right",
+  "footer": "statement, wordmark over links",
+  "imagery": "product built in hero slot",
+  "photos": [],
+  "entry": "marketing landing page",
+  "fingerprint": "page/wayfind/stage-hero/sign-up",
+  "sections": [
+   "nav",
+   "hero (Stage, product preview)",
+   "fleet features (Split)",
+   "statement",
+   "road safety (Split reversed, steps)",
+   "pricing (Grid 3)",
+   "CTA band (Band)",
+   "footer"
+  ],
+  "signature": "live truck board built in the hero slot, departure-board style",
+  "waived": [],
+  "prompt": "TransitIQ marketing landing page — fleet control meets road safety",
+  "data": "sample (fleet) + real (copy from spec)",
+  "date": "2026-11-06",
+  "mode": "build"
+ }
+]
