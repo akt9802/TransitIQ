@@ -1,6 +1,5 @@
 import CorridorMap from "@/components/maps/CorridorMap";
 import TruckLogo from "@/components/icons/TruckLogo";
-import ScrollTruckProgress from "@/components/landing/ScrollTruckProgress";
 
 const OFFERINGS = [
   {
@@ -107,59 +106,6 @@ export const metadata = {
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-paper font-sans text-ink antialiased">
-      <a
-        href="#main"
-        className="absolute left-4 top-4 z-[120] -translate-y-[220%] rounded-md border-2 border-ink bg-accent px-3 py-2 text-xs font-extrabold uppercase tracking-wider text-accent-ink shadow-[var(--shadow-brutal-sm)] transition focus:translate-y-0"
-      >
-        Skip to content
-      </a>
-
-      <header className="sticky top-0 z-50 bg-paper/95 shadow-none backdrop-blur-sm">
-        <div
-          className={`flex flex-wrap items-center justify-between gap-4 py-3.5 ${SHELL}`}
-        >
-          <a
-            href="/"
-            className="group flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-ink no-underline"
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-md border-2 border-ink bg-accent shadow-[var(--shadow-brutal-sm)] transition-transform group-hover:-translate-y-0.5">
-              <TruckLogo className="h-6 w-6 text-accent-ink" decorative />
-            </span>
-            TransitIQ
-          </a>
-          <nav className="hidden flex-wrap items-center gap-x-8 gap-y-2 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-soft xl:flex">
-            <a href="#map" className="hover:text-accent">
-              Map
-            </a>
-            <a href="#offer" className="hover:text-accent">
-              Product
-            </a>
-            <a href="#how" className="hover:text-accent">
-              How it works
-            </a>
-            <a href="#who" className="hover:text-accent">
-              Who it&apos;s for
-            </a>
-            <a href="#pricing" className="hover:text-accent">
-              Pricing
-            </a>
-            <a href="#faq" className="hover:text-accent">
-              FAQ
-            </a>
-          </nav>
-          <a
-            href="mailto:hello@transitiq.in?subject=TransitIQ%20—%20get%20started"
-            className="rounded-md border-2 border-ink bg-accent px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-accent-ink shadow-[var(--shadow-brutal-sm)] transition hover:-translate-y-0.5 hover:bg-accent-hover hover:shadow-[var(--shadow-brutal-accent)] active:translate-y-0"
-          >
-            Get started
-          </a>
-        </div>
-        {/* Progress strip: full width, no extra border (avoids a heavy line above main) */}
-        <div className="bg-paper-muted/50">
-          <ScrollTruckProgress />
-        </div>
-      </header>
-
       <main id="main">
         {/* Hero */}
         <section className="border-b-2 border-ink bg-paper">
