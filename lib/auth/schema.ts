@@ -1,3 +1,4 @@
+import { ensureCompanySchema } from "@/lib/company/schema";
 import { getPool } from "@/lib/db";
 
 /** Run once per process; safe to call from API routes. */
@@ -35,6 +36,8 @@ export async function ensureAuthSchema(): Promise<void> {
   await pool.query(
     `ALTER TABLE email_otps ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'signup'`
   );
+
+  await ensureCompanySchema();
 
   schemaReady = true;
 }

@@ -1,0 +1,125 @@
+import { getPool } from "@/lib/db";
+import type { VehicleInput } from "@/lib/company/types";
+
+function isUnique(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: string }).code === "23505"
+  );
+}
+
+const COLUMNS = `
+  registration_number, make, model, year, chassis_number, engine_number,
+  truck_type, load_capacity_kg, axle_count, length_m, width_m, height_m,
+  ownership, contract_start, contract_end, status, odometer_km, tank_capacity_l
+`;
+
+function values(input: VehicleInput): unknown[] {
+  return [
+    input.registrationNumber,
+    input.make,
+    input.model,
+    input.year,
+    input.chassisNumber,
+    input.engineNumber,
+    input.truckType,
+    input.loadCapacityKg,
+    input.axleCount,
+    input.lengthM,
+    input.widthM,
+    input.heightM,
+    input.ownership,
+    input.contractStart,
+    input.contractEnd,
+    input.status,
+    input.odometerKm,
+    input.tankCapacityL,
+  ];
+}
+
+export async function addVehicle(
+  companyId: string,
+  input: VehicleInput
+): Promise<"created" | "limit"> {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const company = await client.query<{ vehicle_limit: number }>(
+      `SELECT vehicle_limit FROM companies WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+      [companyId]
+    );
+    const limit = company.rows[0]?.vehicle_limit;
+    if (limit == null) {
+      await client.query("ROLLBACK");
+      throw new Error("Set up your fleet first");
+    }
+    const count = await client.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM vehicles WHERE company_id = $1 AND deleted_at IS NULL`,
+      [companyId]
+    );
+    if ((count.rows[0]?.n ?? 0) >= limit) {
+      await client.query("ROLLBACK");
+      return "limit";
+    }
+    await client.query(
+      `INSERT INTO vehicles (company_id, ${COLUMNS})
+       VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+       )`,
+      [companyId, ...values(input)]
+    );
+    await client.query("COMMIT");
+    return "created";
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    if (isUnique(error)) throw new Error("This registration number is already in the fleet");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateVehicle(
+  companyId: string,
+  vehicleId: string,
+  input: VehicleInput
+): Promise<boolean> {
+  const pool = getPool();
+  try {
+    const updated = await pool.query(
+      `UPDATE vehicles SET
+         registration_number = $3,
+         make = $4,
+         model = $5,
+         year = $6,
+         chassis_number = $7,
+         engine_number = $8,
+         truck_type = $9,
+         load_capacity_kg = $10,
+         axle_count = $11,
+         length_m = $12,
+         width_m = $13,
+         height_m = $14,
+         ownership = $15,
+         contract_start = $16,
+         contract_end = $17,
+         status = $18,
+         odometer_km = $19,
+         tank_capacity_l = $20,
+         updated_at = now()
+       WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
+      [vehicleId, companyId, ...values(input)]
+    );
+    return updated.rowCount === 1;
+  } catch (error) {
+    if (isUnique(error)) throw new Error("This registration number is already in the fleet");
+    throw error;
+  }
+}
+
+export function vehicleLimitMessage(limit: number): string {
+  return `This plan includes ${limit} trucks.`;
+}
