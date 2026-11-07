@@ -354,6 +354,14 @@ export type TripStopInput = {
   scheduledAt: string | null;
 };
 
+export type TripProof = {
+  id: string;
+  kind: "pickup" | "delivery";
+  latitude: number;
+  longitude: number;
+  takenAt: string;
+};
+
 export type TripRecord = {
   id: string;
   orderId: string | null;
@@ -376,6 +384,7 @@ export type TripRecord = {
   emptyRun: boolean;
   createdAt: string;
   stops: TripStopRecord[];
+  proofs: TripProof[];
 };
 
 export type TripInput = {

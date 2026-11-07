@@ -114,6 +114,65 @@ export async function ensureOperationsSchema(): Promise<void> {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS trip_proofs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      trip_id uuid NOT NULL REFERENCES trips(id),
+      trip_stop_id uuid NOT NULL REFERENCES trip_stops(id),
+      driver_id uuid REFERENCES drivers(id),
+      kind text NOT NULL CHECK (kind IN ('pickup', 'delivery')),
+      image bytea NOT NULL,
+      latitude double precision NOT NULL,
+      longitude double precision NOT NULL,
+      taken_at timestamptz NOT NULL DEFAULT now(),
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_trip_proofs_trip ON trip_proofs(trip_id, kind);
+
+    CREATE TABLE IF NOT EXISTS fuel_entries (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      vehicle_id uuid NOT NULL REFERENCES vehicles(id),
+      driver_id uuid REFERENCES drivers(id),
+      trip_id uuid REFERENCES trips(id),
+      filled_at timestamptz NOT NULL DEFAULT now(),
+      litres numeric(12,3) NOT NULL,
+      amount numeric(12,2) NOT NULL,
+      price_per_litre numeric(8,2) NOT NULL,
+      details text,
+      image bytea NOT NULL,
+      latitude double precision,
+      longitude double precision,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      deleted_at timestamptz
+    );
+    CREATE INDEX IF NOT EXISTS idx_fuel_entries_company ON fuel_entries(company_id, filled_at DESC);
+  `);
+
+  await pool.query(`
+    ALTER TABLE trip_proofs ADD COLUMN IF NOT EXISTS image bytea;
+    ALTER TABLE fuel_entries ADD COLUMN IF NOT EXISTS image bytea;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'trip_proofs' AND column_name = 'file_key'
+      ) THEN
+        ALTER TABLE trip_proofs ALTER COLUMN file_key DROP NOT NULL;
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'fuel_entries' AND column_name = 'receipt_key'
+      ) THEN
+        ALTER TABLE fuel_entries ALTER COLUMN receipt_key DROP NOT NULL;
+      END IF;
+    END $$;
+  `);
+
+  await pool.query(`
     ALTER TABLE fleet_users
       ADD COLUMN IF NOT EXISTS customer_id uuid REFERENCES customers(id)
   `);

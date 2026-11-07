@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardNav, { type DashboardSection } from "@/components/dashboard/DashboardNav";
 import DriversSection from "@/components/dashboard/DriversSection";
+import FuelSection from "@/components/dashboard/FuelSection";
 import PeopleSection from "@/components/dashboard/PeopleSection";
 import PerformanceSection from "@/components/dashboard/PerformanceSection";
 import TripTracker from "@/components/dashboard/TripTracker";
@@ -66,7 +67,7 @@ function planLabel(plan: string): string {
   return "Free";
 }
 
-const SECTIONS: DashboardSection[] = ["company", "people", "vehicles", "drivers", "trips", "performance"];
+const SECTIONS: DashboardSection[] = ["company", "people", "vehicles", "drivers", "trips", "performance", "fuel"];
 
 function requestedSection(value: string | undefined): DashboardSection | null {
   return SECTIONS.find((section) => section === value) ?? null;
@@ -106,6 +107,7 @@ export default function OwnerDashboard({
         )
       : null,
     canSeeTrips ? link("performance", workspace.owner.roleKey === "driver" ? "My day" : "Performance") : null,
+    canSeeTrips ? link("fuel", "Fuel") : null,
   ].filter((item) => item !== null);
   const requested = requestedSection(section);
   const active =
@@ -273,6 +275,18 @@ export default function OwnerDashboard({
 
       {hasCompany && active === "performance" && canSeeTrips ? (
         <PerformanceSection mine={workspace.owner.roleKey === "driver"} />
+      ) : null}
+
+      {hasCompany && active === "fuel" && canSeeTrips ? (
+        <FuelSection
+          mine={workspace.owner.roleKey === "driver"}
+          vehicles={workspace.vehicles}
+          liveTrip={
+            workspace.trips.find((trip) =>
+              ["started", "loading", "in_transit", "unloading"].includes(trip.status)
+            ) ?? null
+          }
+        />
       ) : null}
 
       {!hasCompany || (editing && active === "company") ? (

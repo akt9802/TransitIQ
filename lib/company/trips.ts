@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { getPool } from "@/lib/db";
 import { metersBetween, pickupAwayMessage, STOP_RANGE_METERS, stopAwayMessage } from "@/lib/company/geo";
+import { proofsForTrips } from "@/lib/company/proofs";
 import type { CustomerRecord, TripInput, TripRecord, TripStopInput, TripStopRecord } from "@/lib/company/types";
 import { LIVE_TRIP_STATUSES } from "@/lib/company/types";
 
@@ -90,6 +91,7 @@ function toTrip(row: TripRow): TripRecord {
     closedAt: asInstant(row.closed_at),
     emptyRun: row.empty_run,
     createdAt: asInstant(row.created_at) ?? new Date(0).toISOString(),
+    proofs: [],
     stops: stops
       .map((stop) => ({
         id: stop.id,
@@ -151,7 +153,10 @@ export async function listTrips(companyId: string, driverId?: string | null): Pr
      ORDER BY t.created_at DESC`,
     [companyId, driverId ?? null]
   );
-  return rows.map(toTrip);
+  const trips = rows.map(toTrip);
+  const proofs = await proofsForTrips(companyId, trips.map((trip) => trip.id));
+  for (const trip of trips) trip.proofs = proofs.get(trip.id) ?? [];
+  return trips;
 }
 
 async function resolveCustomer(client: PoolClient, companyId: string, input: TripInput): Promise<string> {
@@ -504,6 +509,11 @@ export async function changeTripStatus(
     }
 
     if (status === "in_transit") {
+      const pickup = await client.query<{ n: number }>(
+        `SELECT COUNT(*)::int AS n FROM trip_proofs WHERE trip_id = $1 AND kind = 'pickup'`,
+        [tripId]
+      );
+      if ((pickup.rows[0]?.n ?? 0) < 2) throw new Error("2 pickup photos are required");
       await client.query(`UPDATE trips SET status = 'in_transit', updated_at = now() WHERE id = $1`, [tripId]);
       await client.query(
         `UPDATE trip_stops SET departed_at = COALESCE(departed_at, now()), updated_at = now()
@@ -514,6 +524,11 @@ export async function changeTripStatus(
     }
 
     if (status === "completed") {
+      const delivery = await client.query<{ n: number }>(
+        `SELECT COUNT(*)::int AS n FROM trip_proofs WHERE trip_id = $1 AND kind = 'delivery'`,
+        [tripId]
+      );
+      if ((delivery.rows[0]?.n ?? 0) < 2) throw new Error("2 delivery photos are required");
       await client.query(
         `UPDATE trips SET status = 'completed', completed_at = COALESCE(completed_at, now()), updated_at = now()
          WHERE id = $1`,

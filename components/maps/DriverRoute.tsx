@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
+import { ProofCapture } from "@/components/dashboard/ProofPhotos";
 import { primaryBtn, quietBtn } from "@/components/dashboard/styles";
 import { loadGoogleMaps } from "@/components/maps/loadGoogleMaps";
 import {
@@ -90,6 +91,8 @@ export default function DriverRoute({
   const near = away != null && away <= STOP_RANGE_METERS;
   const lastStop = trip.stops[trip.stops.length - 1];
   const middle = trip.status === "in_transit" && target && lastStop && target.id !== lastStop.id;
+  const pickupPhotos = (trip.proofs ?? []).filter((photo) => photo.kind === "pickup").length;
+  const deliveryPhotos = (trip.proofs ?? []).filter((photo) => photo.kind === "delivery").length;
   const current = steps[0];
   const upcoming = steps.slice(1, 4);
 
@@ -294,7 +297,7 @@ export default function DriverRoute({
             </>
           ) : null}
           {trip.status === "loading" ? (
-            <button type="button" className={primaryBtn} disabled={busy} onClick={() => onProgress("in_transit")}>
+            <button type="button" className={primaryBtn} disabled={busy || pickupPhotos < 2} onClick={() => onProgress("in_transit")}>
               On the road
             </button>
           ) : null}
@@ -309,11 +312,19 @@ export default function DriverRoute({
             </button>
           ) : null}
           {trip.status === "unloading" ? (
-            <button type="button" className={primaryBtn} disabled={busy} onClick={() => onProgress("completed")}>
+            <button type="button" className={primaryBtn} disabled={busy || deliveryPhotos < 2} onClick={() => onProgress("completed")}>
               Complete trip
             </button>
           ) : null}
+          <a href="/dashboard?section=fuel" className={`${quietBtn} inline-block no-underline`}>Add fuel</a>
         </div>
+        {trip.status === "loading" || trip.status === "unloading" ? (
+          <ProofCapture
+            tripId={trip.id}
+            kind={trip.status === "loading" ? "pickup" : "delivery"}
+            proofs={trip.proofs ?? []}
+          />
+        ) : null}
       </div>
       <div ref={containerRef} className="h-[70vh] min-h-96 w-full" />
       {discarding ? (

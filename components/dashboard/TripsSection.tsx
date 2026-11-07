@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Actions, Alert, Field, SectionCard, useFleetSave } from "@/components/dashboard/frame";
+import { ProofStrip } from "@/components/dashboard/ProofPhotos";
 import DriverRoute from "@/components/maps/DriverRoute";
 import {
   metersBetween,
@@ -721,6 +722,7 @@ function TripCard({
         })}
       </ol>
       {trip.notes ? <p className="mt-3 text-sm text-ink">{trip.notes}</p> : null}
+      <ProofStrip proofs={trip.proofs ?? []} />
       {canMove || (canWrite && onCopy) ? (
         <div className="mt-4 flex flex-wrap gap-2">
           {canWrite && (trip.status === "assigned" || trip.status === "created") ? (
