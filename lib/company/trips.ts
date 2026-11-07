@@ -4,6 +4,7 @@ import { getPool } from "@/lib/db";
 import { emailTrackingLink } from "@/lib/company/tracking-link";
 import { metersBetween, pickupAwayMessage, STOP_RANGE_METERS, stopAwayMessage } from "@/lib/company/geo";
 import { proofsForTrips } from "@/lib/company/proofs";
+import { costsForTrips, emptyTripCost } from "@/lib/company/trip-cost";
 import type { CustomerRecord, TripInput, TripRecord, TripStopInput, TripStopRecord } from "@/lib/company/types";
 import { LIVE_TRIP_STATUSES } from "@/lib/company/types";
 
@@ -98,6 +99,7 @@ function toTrip(row: TripRow): TripRecord {
     emptyRun: row.empty_run,
     createdAt: asInstant(row.created_at) ?? new Date(0).toISOString(),
     proofs: [],
+    cost: emptyTripCost(row.status),
     stops: stops
       .map((stop) => ({
         id: stop.id,
@@ -160,8 +162,17 @@ export async function listTrips(companyId: string, driverId?: string | null): Pr
     [companyId, driverId ?? null]
   );
   const trips = rows.map(toTrip);
-  const proofs = await proofsForTrips(companyId, trips.map((trip) => trip.id));
-  for (const trip of trips) trip.proofs = proofs.get(trip.id) ?? [];
+  const [proofs, costs] = await Promise.all([
+    proofsForTrips(companyId, trips.map((trip) => trip.id)),
+    costsForTrips(
+      companyId,
+      trips.map((trip) => ({ id: trip.id, status: trip.status, driverId: trip.driverId }))
+    ),
+  ]);
+  for (const trip of trips) {
+    trip.proofs = proofs.get(trip.id) ?? [];
+    trip.cost = costs.get(trip.id) ?? emptyTripCost(trip.status);
+  }
   return trips;
 }
 

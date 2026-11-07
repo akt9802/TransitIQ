@@ -20,7 +20,7 @@ export default function SiteHeader({ email, name }: Props) {
   const isDashboard = pathname === "/dashboard";
 
   return (
-    <header className="sticky top-0 z-50 bg-paper/95 shadow-none backdrop-blur-sm">
+    <header className="sticky top-0 z-50 bg-paper/95 shadow-none backdrop-blur-sm print:hidden">
       <div className={`flex flex-wrap items-center justify-between gap-4 py-3.5 ${SHELL}`}>
         <a
           href="/"

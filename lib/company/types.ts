@@ -363,6 +363,29 @@ export type TripProof = {
   takenAt: string;
 };
 
+export type TripCostLine = {
+  id: string;
+  kind: "fuel" | "puncture" | "engine" | "other";
+  timing: "before_trip" | "on_trip" | "after_trip";
+  at: string;
+  amount: number;
+  detail: string;
+  litres: number | null;
+};
+
+export type TripCost = {
+  fuelAmount: number;
+  fuelLitres: number;
+  extraAmount: number;
+  kilometres: number;
+  payType: string | null;
+  payRate: number | null;
+  payAmount: number | null;
+  payNote: string;
+  total: number;
+  lines: TripCostLine[];
+};
+
 export type TripRecord = {
   id: string;
   orderId: string | null;
@@ -388,6 +411,7 @@ export type TripRecord = {
   createdAt: string;
   stops: TripStopRecord[];
   proofs: TripProof[];
+  cost: TripCost;
 };
 
 export type TripInput = {

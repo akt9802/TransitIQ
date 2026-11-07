@@ -22,6 +22,7 @@ import {
   TRIP_STATUSES,
   type CustomerRecord,
   type DriverRecord,
+  type TripCost,
   type TripRecord,
   type VehicleRecord,
 } from "@/lib/company/types";
@@ -741,6 +742,58 @@ function TrackingShare({ trip }: { trip: TripRecord }) {
   );
 }
 
+function inr(value: number) {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(value);
+}
+
+const LINE_KIND: Record<TripCost["lines"][number]["kind"], string> = {
+  fuel: "Fuel",
+  puncture: "Tyre puncture",
+  engine: "Engine",
+  other: "Other",
+};
+
+const LINE_WHEN: Record<TripCost["lines"][number]["timing"], string> = {
+  before_trip: "Before the trip",
+  on_trip: "On the trip",
+  after_trip: "After the trip",
+};
+
+function TripCostBlock({ trip, sheet }: { trip: TripRecord; sheet: boolean }) {
+  const cost = trip.cost;
+  return (
+    <div className="mt-4 border-2 border-ink p-3">
+      <p className="text-sm font-extrabold text-ink">Trip cost</p>
+      <p className="mt-2 text-sm text-ink">Fuel {inr(cost.fuelAmount)} · {cost.fuelLitres} L</p>
+      <p className="text-sm text-ink">Tracked {cost.kilometres.toLocaleString("en-IN")} km</p>
+      <p className="text-sm text-ink">Other {inr(cost.extraAmount)}</p>
+      <p className="text-sm text-ink">
+        Pay {cost.payAmount == null ? "not added" : inr(cost.payAmount)}
+      </p>
+      <p className="text-sm text-muted">{cost.payNote}</p>
+      <p className="mt-2 text-sm font-extrabold text-ink">Total {inr(cost.total)}</p>
+      {cost.payAmount == null ? <p className="text-sm text-muted">This total does not include driver pay.</p> : null}
+      {cost.lines.length > 0 ? (
+        <ul className="mt-2 space-y-1">
+          {cost.lines.map((line) => (
+            <li key={line.id} className="text-sm text-ink">
+              {LINE_KIND[line.kind]} · {LINE_WHEN[line.timing]} · {inr(line.amount)}
+              {line.litres != null ? ` · ${line.litres} L` : ""} · {line.detail}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm text-muted">No fuel or other cost is linked to this trip.</p>
+      )}
+      {sheet ? (
+        <a className={`${quietBtn} mt-3 inline-block no-underline`} href={`/dashboard/cost/${trip.id}`}>
+          Cost sheet
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
 function TripCard({
   trip,
   queue,
@@ -829,6 +882,7 @@ function TripCard({
         })}
       </ol>
       {trip.notes ? <p className="mt-3 text-sm text-ink">{trip.notes}</p> : null}
+      <TripCostBlock trip={trip} sheet={!ownDriverId} />
       {!ownDriverId ? <TrackingShare trip={trip} /> : null}
       <ProofStrip proofs={trip.proofs ?? []} />
       {canMove || (canWrite && onCopy) ? (
