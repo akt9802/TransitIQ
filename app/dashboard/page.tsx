@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Notice } from "@/components/Modal";
 import OwnerDashboard from "@/components/dashboard/OwnerDashboard";
 import { ensureAuthSchema } from "@/lib/auth/schema";
 import { getSession } from "@/lib/auth/session";
@@ -40,9 +41,7 @@ function DashboardError({ message }: { message: string }) {
   return (
     <main id="main" className="mx-auto w-full max-w-xl px-4 py-16 sm:px-6">
       <h1 className="text-2xl font-extrabold tracking-tight text-ink">Dashboard unavailable</h1>
-      <p role="alert" className="mt-4 rounded-md border-2 border-ink bg-accent-warm/40 px-3 py-2 text-sm text-ink">
-        {message}
-      </p>
+      <Notice message={message} />
       <a
         href="/dashboard"
         className="mt-6 inline-block rounded-md border-2 border-ink bg-accent px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-accent-ink shadow-[var(--shadow-brutal-sm)]"

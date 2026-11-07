@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Field, RemoveButton, useFleetSave } from "@/components/dashboard/frame";
+import { Alert, Field, RemoveButton, useFleetSave } from "@/components/dashboard/frame";
 import { fieldClass, quietBtn } from "@/components/dashboard/styles";
 import type { PaperRecord } from "@/lib/company/types";
 
@@ -22,7 +22,7 @@ export default function PapersPanel({
   canWrite: boolean;
   showIssued?: boolean;
 }) {
-  const { error, saving, submit } = useFleetSave();
+  const { error, setError, saving, submit } = useFleetSave();
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState(kinds[0]?.key ?? "");
   const [documentNumber, setDocumentNumber] = useState("");
@@ -41,7 +41,7 @@ export default function PapersPanel({
           </button>
         ) : null}
       </div>
-      {error ? <p className="mt-3 text-sm text-ink">{error}</p> : null}
+      <Alert message={error} onClose={() => setError(null)} />
       {open ? (
         <form
           className="mt-4 grid gap-4 sm:grid-cols-2"

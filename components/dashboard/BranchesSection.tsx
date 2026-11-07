@@ -21,7 +21,7 @@ export default function BranchesSection({ branches, canWrite }: { branches: Bran
         ) : null
       }
     >
-      <Alert message={error} />
+      <Alert message={error} onClose={() => setError(null)} />
       {draft ? (
         <form
           className="mt-4 grid gap-4 border-t border-ink/15 pt-4 sm:grid-cols-2"

@@ -57,7 +57,7 @@ export default function RosterSection({
           </button>
         ))}
       </div>
-      <Alert message={error} />
+      <Alert message={error} onClose={() => setError(null)} />
       {tab === "shifts" ? (
         <LogForm
           canWrite={canWrite}

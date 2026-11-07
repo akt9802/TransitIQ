@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Modal } from "@/components/Modal";
 import { labelClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
 
 export async function send(url: string, method: string, body?: unknown) {
@@ -63,13 +64,9 @@ export function SectionCard({
   );
 }
 
-export function Alert({ message }: { message: string | null }) {
+export function Alert({ message, onClose }: { message: string | null; onClose: () => void }) {
   if (!message) return null;
-  return (
-    <p role="alert" className="mt-4 rounded-md border-2 border-ink bg-accent-warm/40 px-3 py-2 text-sm text-ink">
-      {message}
-    </p>
-  );
+  return <Modal message={message} onConfirm={onClose} onCancel={onClose} />;
 }
 
 export function Actions({

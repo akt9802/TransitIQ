@@ -60,3 +60,11 @@
     color: var(--color-ink);
   }
 }
+
+.pac-container {
+  z-index: 10000;
+  margin-top: 4px;
+  border: 2px solid var(--color-ink);
+  border-radius: 6px;
+  font-family: var(--font-sans);
+}

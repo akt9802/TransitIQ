@@ -9,6 +9,7 @@ export type OwnerProfile = {
   language: Language;
   roleKey: string | null;
   roleName: string | null;
+  driverId: string | null;
 };
 
 export type CompanyRecord = {
@@ -307,6 +308,91 @@ export const ALERT_CHANNELS = [
   { key: "in_app", label: "In app" },
 ] as const;
 
+export const TRIP_STATUSES = [
+  { key: "created", label: "Not assigned" },
+  { key: "assigned", label: "In queue" },
+  { key: "started", label: "Started" },
+  { key: "loading", label: "Loading" },
+  { key: "in_transit", label: "On the road" },
+  { key: "unloading", label: "Unloading" },
+  { key: "completed", label: "Completed" },
+  { key: "closed", label: "Closed" },
+  { key: "canceled", label: "Canceled" },
+] as const;
+
+export const TRIP_STOP_KINDS = [
+  { key: "pickup", label: "Pickup" },
+  { key: "drop", label: "Drop" },
+  { key: "return", label: "Return" },
+] as const;
+
+export const LIVE_TRIP_STATUSES = ["started", "loading", "in_transit", "unloading"] as const;
+
+export type CustomerRecord = {
+  id: string;
+  name: string;
+  phone: string | null;
+};
+
+export type TripStopRecord = {
+  id: string;
+  sequence: number;
+  kind: string;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  scheduledAt: string | null;
+  arrivedAt: string | null;
+  departedAt: string | null;
+};
+
+export type TripStopInput = {
+  kind: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+  scheduledAt: string | null;
+};
+
+export type TripRecord = {
+  id: string;
+  orderId: string | null;
+  customerId: string | null;
+  customerName: string;
+  loadType: string | null;
+  weightKg: number | null;
+  deadlineAt: string | null;
+  notes: string | null;
+  orderStatus: string;
+  vehicleId: string | null;
+  vehicleRegistration: string | null;
+  driverId: string | null;
+  driverName: string | null;
+  status: string;
+  etaAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  closedAt: string | null;
+  emptyRun: boolean;
+  createdAt: string;
+  stops: TripStopRecord[];
+};
+
+export type TripInput = {
+  customerId: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  loadType: string | null;
+  weightKg: number | null;
+  deadlineAt: string | null;
+  notes: string | null;
+  driverId: string;
+  vehicleId: string;
+  emptyRun: boolean;
+  etaAt: string | null;
+  stops: TripStopInput[];
+};
+
 export type Workspace = {
   owner: OwnerProfile;
   company: CompanyRecord | null;
@@ -325,6 +411,8 @@ export type Workspace = {
   subscription: SubscriptionRecord | null;
   apiKeys: ApiKeyRecord[];
   notifications: NotificationPreference[];
+  customers: CustomerRecord[];
+  trips: TripRecord[];
   permissions: string[];
 };
 

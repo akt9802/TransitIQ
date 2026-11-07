@@ -6,13 +6,13 @@ import { fieldClass, primaryBtn, quietBtn } from "@/components/dashboard/styles"
 import type { ApiKeyRecord } from "@/lib/company/types";
 
 export default function ApiKeysSection({ keys, canWrite }: { keys: ApiKeyRecord[]; canWrite: boolean }) {
-  const { error, saving, submit } = useFleetSave();
+  const { error, setError, saving, submit } = useFleetSave();
   const [name, setName] = useState("");
   const [secret, setSecret] = useState<string | null>(null);
 
   return (
     <SectionCard title="API keys" caption="Keys for your own tools. The secret is shown once, and only a hash is stored.">
-      <Alert message={error} />
+      <Alert message={error} onClose={() => setError(null)} />
       {secret ? (
         <p className="mt-4 break-all rounded-md border-2 border-ink bg-accent-warm/40 px-3 py-2 text-sm text-ink">
           Copy this key now. It will not be shown again.

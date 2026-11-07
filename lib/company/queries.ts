@@ -5,6 +5,7 @@ import {
   listDrivers,
   listVehiclePapers,
 } from "@/lib/company/records";
+import { listCustomers, listTrips } from "@/lib/company/trips";
 import type {
   CompanyInput,
   CompanyRecord,
@@ -27,6 +28,8 @@ type FleetLists = Pick<
   | "pointEvents"
   | "subscription"
   | "apiKeys"
+  | "customers"
+  | "trips"
 >;
 
 type OwnerRow = {
@@ -39,6 +42,7 @@ type OwnerRow = {
   company_id: string | null;
   role_key: string | null;
   role_name: string | null;
+  driver_id: string | null;
 };
 
 type CompanyRow = {
@@ -70,7 +74,7 @@ function toCompany(row: CompanyRow): CompanyRecord {
 export async function getWorkspace(userId: string): Promise<Workspace | null> {
   const pool = getPool();
   const { rows } = await pool.query<OwnerRow>(
-    `SELECT u.id, u.email, u.full_name, u.phone, u.address, u.language, u.company_id,
+    `SELECT u.id, u.email, u.full_name, u.phone, u.address, u.language, u.company_id, u.driver_id,
             r.key AS role_key, r.name AS role_name
      FROM fleet_users u
      LEFT JOIN roles r ON r.id = u.role_id
@@ -96,6 +100,8 @@ export async function getWorkspace(userId: string): Promise<Workspace | null> {
     pointEvents: [],
     subscription: null,
     apiKeys: [],
+    customers: [],
+    trips: [],
   };
   let fleet = emptyFleet;
   if (owner.company_id) {
@@ -153,6 +159,10 @@ export async function getWorkspace(userId: string): Promise<Workspace | null> {
       pointEvents: [],
       subscription: await getSubscription(companyId),
       apiKeys: [],
+      customers: await listCustomers(companyId),
+      trips: owner.role_key === "driver" && !owner.driver_id
+        ? []
+        : await listTrips(companyId, owner.role_key === "driver" ? owner.driver_id : null),
     };
   }
 
@@ -176,6 +186,7 @@ export async function getWorkspace(userId: string): Promise<Workspace | null> {
       language: owner.language === "hi" ? "hi" : "en",
       roleKey: owner.role_key,
       roleName: owner.role_name,
+      driverId: owner.driver_id,
     },
     company,
     people,

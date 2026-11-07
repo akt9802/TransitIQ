@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ASSIGNABLE_ROLES, type PersonRecord } from "@/lib/company/types";
+import { Alert } from "@/components/dashboard/frame";
 import { fieldClass, labelClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
 
 type Props = {
@@ -94,11 +95,7 @@ export default function PeopleSection({ people, canWrite }: Props) {
         ) : null}
       </div>
 
-      {error ? (
-        <p role="alert" className="mt-4 rounded-md border-2 border-ink bg-accent-warm/40 px-3 py-2 text-sm text-ink">
-          {error}
-        </p>
-      ) : null}
+      <Alert message={error} onClose={() => setError(null)} />
 
       {draft ? (
         <form onSubmit={save} className="mt-4 grid gap-4 border-t border-ink/15 pt-4 sm:grid-cols-2">

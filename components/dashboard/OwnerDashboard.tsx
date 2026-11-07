@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import DashboardNav, { type DashboardSection } from "@/components/dashboard/DashboardNav";
 import DriversSection from "@/components/dashboard/DriversSection";
 import PeopleSection from "@/components/dashboard/PeopleSection";
+import TripsSection from "@/components/dashboard/TripsSection";
+import { Alert } from "@/components/dashboard/frame";
 import { fieldClass, labelClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
 import VehiclesSection from "@/components/dashboard/VehiclesSection";
 import type { CompanyInput, Language, Workspace } from "@/lib/company/types";
@@ -62,7 +64,7 @@ function planLabel(plan: string): string {
   return "Free";
 }
 
-const SECTIONS: DashboardSection[] = ["company", "people", "vehicles", "drivers"];
+const SECTIONS: DashboardSection[] = ["company", "people", "vehicles", "drivers", "trips"];
 
 function requestedSection(value: string | undefined): DashboardSection | null {
   return SECTIONS.find((section) => section === value) ?? null;
@@ -82,6 +84,7 @@ export default function OwnerDashboard({
   const canSeePeople = workspace.permissions.includes("people.read");
   const canSeeVehicles = workspace.permissions.includes("vehicles.read");
   const canSeeDrivers = workspace.permissions.includes("drivers.read");
+  const canSeeTrips = workspace.permissions.includes("trips.read");
   const link = (section: DashboardSection, label: string, count?: number) => ({
     section,
     label,
@@ -93,6 +96,13 @@ export default function OwnerDashboard({
     canSeePeople ? link("people", "People", workspace.people.length) : null,
     canSeeVehicles ? link("vehicles", "Vehicles", workspace.vehicles.length) : null,
     canSeeDrivers ? link("drivers", "Drivers", workspace.drivers.length) : null,
+    canSeeTrips
+      ? link(
+          "trips",
+          "Trips",
+          workspace.trips.filter((trip) => trip.status === "assigned" || ["started", "loading", "in_transit", "unloading"].includes(trip.status)).length
+        )
+      : null,
   ].filter((item) => item !== null);
   const requested = requestedSection(section);
   const active =
@@ -171,9 +181,7 @@ export default function OwnerDashboard({
       ) : null}
 
       {error && (!hasCompany || active === "company") ? (
-        <p role="alert" className="mt-6 rounded-md border-2 border-ink bg-accent-warm/40 px-3 py-2 text-sm text-ink">
-          {error}
-        </p>
+        <Alert message={error} onClose={() => setError(null)} />
       ) : null}
 
       {hasCompany && !editing && workspace.company && navItems.length === 0 ? (
@@ -237,6 +245,17 @@ export default function OwnerDashboard({
           people={workspace.people}
           papers={workspace.driverPapers}
           canWrite={workspace.permissions.includes("drivers.write")}
+        />
+      ) : null}
+
+      {hasCompany && active === "trips" && canSeeTrips ? (
+        <TripsSection
+          trips={workspace.trips}
+          customers={workspace.customers}
+          drivers={workspace.drivers}
+          vehicles={workspace.vehicles}
+          canWrite={workspace.permissions.includes("trips.write")}
+          ownDriverId={workspace.owner.roleKey === "driver" ? workspace.owner.driverId : null}
         />
       ) : null}
 

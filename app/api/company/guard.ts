@@ -58,7 +58,7 @@ export async function handleWrite(
 
 export function saved(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
-  const isInput = /required|must be|should|not valid|Missing|already|Choose|not found|in use|linked/i.test(message);
+  const isInput = /required|must be|should|not valid|Missing|already|Choose|not found|in use|linked|expired|cannot|not at|on leave|inactive|retired|maintenance/i.test(message);
   if (!isInput) console.error(fallback, error);
   return NextResponse.json(
     { error: isInput ? message : formatPgError(error) },

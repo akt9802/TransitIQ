@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export type DashboardSection = "company" | "people" | "vehicles" | "drivers";
+export type DashboardSection = "company" | "people" | "vehicles" | "drivers" | "trips";
 
 type Item = {
   section: DashboardSection;

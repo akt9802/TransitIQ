@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
-const SCRIPT_ID = "google-maps-script-transitiq";
+import { loadGoogleMaps } from "@/components/maps/loadGoogleMaps";
 
 const PATH: google.maps.LatLngLiteral[] = [
   { lat: 19.281, lng: 73.048 },
@@ -129,39 +128,16 @@ export default function CorridorMap() {
     }
 
     setStatus("loading");
-
-    const existing = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
-    if (existing) {
-      if (window.google?.maps) {
-        runWhenReady();
-      } else {
-        const onLoad = () => runWhenReady();
-        existing.addEventListener("load", onLoad, { once: true });
-        existing.addEventListener("error", () => setStatus("error"), { once: true });
-        return () => {
-          cancelled = true;
-          existing.removeEventListener("load", onLoad);
-          dispose?.();
-        };
-      }
-      return () => {
-        cancelled = true;
-        dispose?.();
-      };
-    }
-
-    const script = document.createElement("script");
-    script.id = SCRIPT_ID;
-    script.async = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}`;
-    script.onload = () => runWhenReady();
-    script.onerror = () => setStatus("error");
-    document.head.appendChild(script);
+    loadGoogleMaps()
+      .then(() => {
+        if (!cancelled) runWhenReady();
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
 
     return () => {
       cancelled = true;
-      script.onload = null;
-      script.onerror = null;
       dispose?.();
     };
   }, []);

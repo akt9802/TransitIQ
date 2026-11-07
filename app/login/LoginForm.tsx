@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Modal } from "@/components/Modal";
 import type { OtpPurpose } from "@/lib/auth/otp";
 
 type Step = "email" | "otp" | "password" | "login" | "forgot";
@@ -148,11 +149,7 @@ export default function LoginForm() {
           {message}
         </p>
       ) : null}
-      {error ? (
-        <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
-          {error}
-        </p>
-      ) : null}
+      {error ? <Modal message={error} onConfirm={() => setError(null)} onCancel={() => setError(null)} /> : null}
 
       {step === "email" && (
         <form onSubmit={(e) => requestOtp(e, "signup")} className="mt-6 space-y-4">

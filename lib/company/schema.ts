@@ -1,4 +1,5 @@
 import { ensureFleetSchema } from "@/lib/company/fleet-schema";
+import { ensureOperationsSchema } from "@/lib/company/operations-schema";
 import { getPool } from "@/lib/db";
 
 /** Company, people, and access tables. Safe to call more than once. */
@@ -214,6 +215,7 @@ export async function ensureCompanySchema(): Promise<void> {
   `);
 
   await ensureFleetSchema();
+  await ensureOperationsSchema();
 
   await pool.query(`
     INSERT INTO permissions (key, description) VALUES

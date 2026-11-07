@@ -6,7 +6,7 @@ import { primaryBtn } from "@/components/dashboard/styles";
 import { ALERT_CHANNELS, ALERT_KINDS, type NotificationPreference } from "@/lib/company/types";
 
 export default function AlertsSection({ saved }: { saved: NotificationPreference[] }) {
-  const { error, saving, submit } = useFleetSave();
+  const { error, setError, saving, submit } = useFleetSave();
   const [items, setItems] = useState(() =>
     ALERT_KINDS.flatMap((kind) =>
       ALERT_CHANNELS.map((channel) => ({
@@ -27,7 +27,7 @@ export default function AlertsSection({ saved }: { saved: NotificationPreference
 
   return (
     <SectionCard title="Alerts" caption="Choose which messages you want, and where they should arrive.">
-      <Alert message={error} />
+      <Alert message={error} onClose={() => setError(null)} />
       <form
         className="mt-4 overflow-x-auto"
         onSubmit={async (e) => {

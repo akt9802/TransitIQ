@@ -1,7 +1,8 @@
 "use client";
 
-import { cloneElement, useEffect, useState, type ReactElement } from "react";
+import { cloneElement, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
+import { Alert } from "@/components/dashboard/frame";
 import PapersPanel from "@/components/dashboard/PapersPanel";
 import {
   TRUCK_TYPES,
@@ -145,11 +146,6 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
 
   const errorField = error ? fieldForError(error) : null;
 
-  useEffect(() => {
-    if (!error) return;
-    document.getElementById("vehicle-form-error")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [error]);
-
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!draft) return;
@@ -196,11 +192,7 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
         ) : null}
       </div>
 
-      {error && !draft ? (
-        <p role="alert" className="mt-4 rounded-md border-2 border-ink bg-accent-warm/40 px-3 py-2 text-sm text-ink">
-          {error}
-        </p>
-      ) : null}
+      <Alert message={error} onClose={() => setError(null)} />
 
       {draft ? (
         <form onSubmit={save} className="mt-4 grid gap-4 border-t border-ink/15 pt-4 sm:grid-cols-2">
@@ -311,15 +303,6 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
               Cancel
             </button>
           </div>
-          {error ? (
-            <p
-              id="vehicle-form-error"
-              role="alert"
-              className="rounded-md border-2 border-ink bg-accent-warm/40 px-3 py-2 text-sm text-ink sm:col-span-2"
-            >
-              {error}
-            </p>
-          ) : null}
         </form>
       ) : null}
       {draft?.id ? (

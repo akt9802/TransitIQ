@@ -7,6 +7,7 @@ import type {
   NotificationPreference,
   PaperInput,
   PersonInput,
+  TripInput,
   VehicleInput,
 } from "@/lib/company/types";
 import {
@@ -19,6 +20,8 @@ import {
   DRIVER_STATUSES,
   HOS_KINDS,
   PAY_TYPES,
+  TRIP_STATUSES,
+  TRIP_STOP_KINDS,
   TRUCK_TYPES,
   VEHICLE_DOC_KINDS,
   VEHICLE_OWNERSHIP,
@@ -339,6 +342,63 @@ export function parsePoints(body: unknown): { driverId: string; points: number; 
   };
 }
 
+export function parseTripInput(body: unknown): TripInput {
+  const raw = asObject(body);
+  const customerId = optionalUuid(raw.customerId, "Customer");
+  const customerName = limited(raw.customerName, 120, "Customer name");
+  if (!customerId && !customerName) throw new Error("Customer name is required");
+  const stopRows = Array.isArray(raw.stops) ? raw.stops : [];
+  if (stopRows.length < 2) throw new Error("A start and an end are required");
+  if (stopRows.length > 8) throw new Error("A trip can have at most 8 stops");
+  const stops = stopRows.map((item, index) => {
+    const stop = asObject(item);
+    const kind = choice(stop.kind, TRIP_STOP_KINDS, "Stop");
+    const label = index === 0 ? "start" : index === stopRows.length - 1 ? "end" : `stop ${index + 1}`;
+    const address = limited(stop.address, 400, index === 0 ? "Start address" : index === stopRows.length - 1 ? "End address" : "Stop address");
+    if (!address) throw new Error(`Choose the ${label} on the map`);
+    const latitude = coordinate(stop.latitude, "Latitude", -90, 90);
+    const longitude = coordinate(stop.longitude, "Longitude", -180, 180);
+    if (latitude == null || longitude == null) throw new Error(`Choose the ${label} on the map`);
+    const scheduledAt = text(stop.scheduledAt) ? requiredInstant(stop.scheduledAt, "Stop time") : null;
+    return { kind, address, latitude, longitude, scheduledAt };
+  });
+  if (stops[0].kind !== "pickup") throw new Error("The first stop must be a pickup");
+  const last = stops[stops.length - 1];
+  if (last.kind === "pickup") throw new Error("The last stop must be a drop");
+  const startAt = stops[0].scheduledAt;
+  const endAt = last.scheduledAt;
+  if (!startAt) throw new Error("Start time is required");
+  if (!endAt) throw new Error("End time is required");
+  if (endAt < startAt) throw new Error("End time must be on or after the start");
+  for (const stop of stops.slice(1, -1)) {
+    if (stop.scheduledAt && startAt && stop.scheduledAt < startAt) {
+      throw new Error("A stop cannot be before the start");
+    }
+    if (stop.scheduledAt && endAt && stop.scheduledAt > endAt) {
+      throw new Error("A stop cannot be after the end");
+    }
+  }
+  return {
+    customerId,
+    customerName,
+    customerPhone: phone(raw.customerPhone, "Customer phone"),
+    loadType: limited(raw.loadType, 80, "Load"),
+    weightKg: optionalNumber(raw.weightKg, "Weight", 200000),
+    deadlineAt: text(raw.deadlineAt) ? requiredInstant(raw.deadlineAt, "Deadline") : null,
+    notes: limited(raw.notes, 500, "Notes"),
+    driverId: requiredUuid(raw.driverId, "Driver"),
+    vehicleId: requiredUuid(raw.vehicleId, "Truck"),
+    emptyRun: raw.emptyRun === true,
+    etaAt: text(raw.etaAt) ? requiredInstant(raw.etaAt, "ETA") : null,
+    stops,
+  };
+}
+
+export function parseTripStatus(body: unknown): string {
+  const raw = asObject(body);
+  return choice(raw.status, TRIP_STATUSES, "Status");
+}
+
 export function parseApiKeyName(body: unknown): string {
   const raw = asObject(body);
   const name = limited(raw.name, 80, "Key name");
@@ -355,6 +415,15 @@ export function parseNotifications(body: unknown): NotificationPreference[] {
     const channel = choice(row.channel, ALERT_CHANNELS, "Channel");
     return { kind, channel, enabled: row.enabled === true };
   });
+}
+
+function coordinate(value: unknown, label: string, min: number, max: number): number | null {
+  if (value == null || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(text(value));
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    throw new Error(`${label} is not valid`);
+  }
+  return parsed;
 }
 
 function requiredInstant(value: unknown, label: string): string {
