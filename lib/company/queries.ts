@@ -1,7 +1,6 @@
 import { getPool } from "@/lib/db";
 import {
   getSubscription,
-  listBranches,
   listDriverPapers,
   listDrivers,
   listVehiclePapers,
@@ -142,7 +141,7 @@ export async function getWorkspace(userId: string): Promise<Workspace | null> {
     vehicles = await listVehicles(owner.company_id);
     const companyId = owner.company_id;
     fleet = {
-      branches: await listBranches(companyId),
+      branches: [],
       vendors: [],
       drivers: await listDrivers(companyId),
       vehiclePapers: await listVehiclePapers(companyId),

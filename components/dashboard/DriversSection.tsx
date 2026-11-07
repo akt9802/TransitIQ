@@ -8,7 +8,6 @@ import {
   DRIVER_DOC_KINDS,
   DRIVER_STATUSES,
   PAY_TYPES,
-  type BranchRecord,
   type DriverRecord,
   type PaperRecord,
   type PersonRecord,
@@ -74,13 +73,11 @@ function fromDriver(driver: DriverRecord): Draft {
 
 export default function DriversSection({
   drivers,
-  branches,
   people,
   papers,
   canWrite,
 }: {
   drivers: DriverRecord[];
-  branches: BranchRecord[];
   people: PersonRecord[];
   papers: PaperRecord[];
   canWrite: boolean;
@@ -117,12 +114,6 @@ export default function DriversSection({
         >
           <Field label="Name"><input required value={draft.fullName} onChange={(e) => set("fullName", e.target.value)} className={fieldClass} /></Field>
           <Field label="Phone"><input required value={draft.phone} onChange={(e) => set("phone", e.target.value)} className={fieldClass} inputMode="tel" /></Field>
-          <Field label="Branch">
-            <select value={draft.branchId} onChange={(e) => set("branchId", e.target.value)} className={fieldClass}>
-              <option value="">No branch</option>
-              {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-            </select>
-          </Field>
           <Field label="Sign-in">
             <select value={draft.userId} onChange={(e) => set("userId", e.target.value)} className={fieldClass}>
               <option value="">No login</option>

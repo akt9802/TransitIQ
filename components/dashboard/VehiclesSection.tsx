@@ -8,7 +8,6 @@ import {
   VEHICLE_DOC_KINDS,
   VEHICLE_OWNERSHIP,
   VEHICLE_STATUSES,
-  type BranchRecord,
   type PaperRecord,
   type VehicleRecord,
 } from "@/lib/company/types";
@@ -18,7 +17,6 @@ type Props = {
   vehicles: VehicleRecord[];
   vehicleLimit: number;
   canWrite: boolean;
-  branches: BranchRecord[];
   papers: PaperRecord[];
 };
 
@@ -133,7 +131,7 @@ function fieldForError(message: string): keyof Draft | null {
   return ERROR_FIELDS.find(([prefix]) => message.startsWith(prefix))?.[1] ?? null;
 }
 
-export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, branches, papers }: Props) {
+export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, papers }: Props) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -220,14 +218,6 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, bran
                 <option key={item.key} value={item.key}>
                   {item.label}
                 </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Branch" field="branchId" errorField={errorField}>
-            <select value={draft.branchId} onChange={(e) => set("branchId", e.target.value)} className={fieldClass}>
-              <option value="">No branch</option>
-              {branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>{branch.name}</option>
               ))}
             </select>
           </Field>
