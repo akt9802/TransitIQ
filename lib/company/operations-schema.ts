@@ -99,10 +99,18 @@ export async function ensureOperationsSchema(): Promise<void> {
       recorded_at timestamptz NOT NULL DEFAULT now(),
       latitude double precision NOT NULL,
       longitude double precision NOT NULL,
+      speed_kmh double precision,
+      moving boolean NOT NULL DEFAULT false,
       source text NOT NULL DEFAULT 'phone' CHECK (source IN ('gps', 'phone'))
     );
     CREATE INDEX IF NOT EXISTS idx_location_points_trip ON location_points(trip_id, recorded_at);
     CREATE INDEX IF NOT EXISTS idx_location_points_driver ON location_points(driver_id, recorded_at);
+  `);
+
+  await pool.query(`
+    ALTER TABLE location_points
+      ADD COLUMN IF NOT EXISTS speed_kmh double precision,
+      ADD COLUMN IF NOT EXISTS moving boolean NOT NULL DEFAULT false
   `);
 
   await pool.query(`

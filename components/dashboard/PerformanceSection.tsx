@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, SectionCard } from "@/components/dashboard/frame";
 import { primaryBtn, quietBtn } from "@/components/dashboard/styles";
 import LiveTrail from "@/components/maps/LiveTrail";
+import { formatDrive } from "@/lib/company/motion";
 import type { TrackingSnapshot } from "@/lib/company/tracking";
 
 function money(value: number) {
@@ -11,10 +12,7 @@ function money(value: number) {
 }
 
 function clock(hours: number) {
-  const total = Math.round(hours * 60);
-  const whole = Math.floor(total / 60);
-  const minutes = total % 60;
-  return minutes ? `${whole} h ${minutes} min` : `${whole} h`;
+  return formatDrive(hours);
 }
 
 function payLabel(payType: string) {
@@ -77,13 +75,28 @@ export default function PerformanceSection({ mine }: { mine: boolean }) {
       title={mine ? "My day" : "Performance"}
       caption={
         snapshot
-          ? `A point is stored about every ${snapshot.gapMinutes} minutes and kept for ${snapshot.keptDays} days. Kilometres come from those points. Per km and per trip pay use that window. Salary is the monthly rate.`
+          ? `A point is stored about every ${snapshot.gapMinutes} minutes and kept for ${snapshot.keptDays} days. The truck counts as moving after ${snapshot.moveMeters} metres. After ${snapshot.driveLimitHours} hours of driving since the last wake-up, ${mine ? "stop and rest" : "the driver is asked to stop and rest"}. Parked time does not count. Per km and per trip pay use those ${snapshot.keptDays} days. Salary is the monthly rate.`
           : "Loading the last 10 days."
       }
     >
       <Alert message={error} onClose={() => setError(null)} />
       {mine && row ? (
         <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <section className={`border-2 border-ink p-4 ${row.restDue ? "bg-accent-warm/40 md:col-span-2" : "bg-paper"}`}>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted">
+              {row.sleepingSince ? "Rest" : "Driving since you last woke"}
+            </p>
+            <p className="mt-1 text-2xl font-extrabold text-ink">
+              {row.restDue ? "Stop and rest" : row.sleepingSince ? "Sleeping" : clock(row.drivingHours)}
+            </p>
+            <p className="mt-1 text-sm text-ink">
+              {row.restDue
+                ? `You have been driving for ${clock(row.drivingHours)}. Please stop and take a rest.`
+                : row.sleepingSince
+                  ? "The driving clock is paused while you sleep."
+                  : `Of ${snapshot?.driveLimitHours ?? 12} hours. Only time the truck is moving counts.`}
+            </p>
+          </section>
           <section className="border-2 border-ink bg-paper p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-muted">Sleep today</p>
             <p className="mt-1 text-2xl font-extrabold text-ink">{clock(row.sleepHours)}</p>
@@ -101,14 +114,35 @@ export default function PerformanceSection({ mine }: { mine: boolean }) {
               disabled={saving}
               onClick={() => sleep(row.sleepingSince ? "wake" : "start")}
             >
-              {row.sleepingSince ? "Wake up" : "Start sleeping"}
+              {row.sleepingSince ? "Wake up" : row.restDue ? "Stop and sleep" : "Start sleeping"}
             </button>
+          </section>
+          <section className="border-2 border-ink bg-paper p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted">This trip</p>
+            {row.onTrip ? (
+              <>
+                <p className="mt-1 text-2xl font-extrabold text-ink">
+                  {row.liveMoveCount} {row.liveMoveCount === 1 ? "move" : "moves"}
+                </p>
+                <p className="mt-1 text-sm text-ink">
+                  Moving for {clock(row.liveMovingHours)}.
+                  {row.liveMoving
+                    ? ` On the move${row.liveSpeedKmh != null ? ` at ${row.liveSpeedKmh} km/h` : ""}.`
+                    : row.liveMoveCount === 0
+                      ? " Waiting until the truck covers some ground."
+                      : " Stopped right now."}
+                </p>
+              </>
+            ) : (
+              <p className="mt-1 text-sm text-ink">No trip on the road. Movement is counted after a trip starts.</p>
+            )}
           </section>
           <section className="border-2 border-ink bg-paper p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-muted">Last {snapshot?.keptDays} days</p>
             <p className="mt-1 text-2xl font-extrabold text-ink">{row.kilometres.toLocaleString("en-IN")} km</p>
             <p className="mt-1 text-sm text-ink">
-              {row.tripsFinished} finished {row.tripsFinished === 1 ? "trip" : "trips"} · {payLabel(row.payType)}
+              {row.tripsFinished} finished {row.tripsFinished === 1 ? "trip" : "trips"} · truck started moving {row.moveCount}{" "}
+              {row.moveCount === 1 ? "time" : "times"} · {payLabel(row.payType)}
             </p>
             <p className="mt-2 text-sm font-extrabold text-ink">
               {row.amount == null ? "Pay rate not set" : money(row.amount)}
@@ -119,11 +153,13 @@ export default function PerformanceSection({ mine }: { mine: boolean }) {
       ) : null}
       {!mine && snapshot ? (
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
+          <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b-2 border-ink text-xs font-bold uppercase tracking-wider text-muted">
                 <th className="py-2 pr-3">Driver</th>
                 <th className="py-2 pr-3">Km</th>
+                <th className="py-2 pr-3">Moves</th>
+                <th className="py-2 pr-3">Since rest</th>
                 <th className="py-2 pr-3">Trips</th>
                 <th className="py-2 pr-3">Sleep today</th>
                 <th className="py-2 pr-3">Pay</th>
@@ -135,6 +171,12 @@ export default function PerformanceSection({ mine }: { mine: boolean }) {
                 <tr key={item.driverId} className="border-b border-ink/15">
                   <td className="py-3 pr-3 font-extrabold text-ink">{item.driverName}</td>
                   <td className="py-3 pr-3">{item.kilometres.toLocaleString("en-IN")}</td>
+                  <td className="py-3 pr-3">{item.moveCount}</td>
+                  <td className="py-3 pr-3">
+                    {clock(item.drivingHours)}
+                    {item.restDue ? <span className="mt-1 block font-extrabold text-ink">Needs rest</span> : null}
+                    {item.onTrip && item.liveMoving ? <span className="mt-1 block text-muted">Moving now</span> : null}
+                  </td>
                   <td className="py-3 pr-3">{item.tripsFinished}</td>
                   <td className="py-3 pr-3">
                     {clock(item.sleepHours)}

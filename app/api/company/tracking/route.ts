@@ -16,6 +16,8 @@ export async function GET() {
         keptDays: 10,
         gapMinutes: 5,
         sleepTargetHours: 8,
+        driveLimitHours: 12,
+        moveMeters: 400,
         rows: [],
         trails: [],
       });

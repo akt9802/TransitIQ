@@ -2,10 +2,19 @@ import { getPool } from "@/lib/db";
 import { metersBetween } from "@/lib/company/geo";
 import { ensureFleetSchema } from "@/lib/company/fleet-schema";
 import { ensureOperationsSchema } from "@/lib/company/operations-schema";
+import {
+  DRIVE_LIMIT_HOURS,
+  MOVE_METERS,
+  restMessage,
+  segmentMove,
+  summarizeMotion,
+  type MotionPoint,
+} from "@/lib/company/motion";
 
 export const TRACK_KEEP_DAYS = 10;
 export const TRACK_GAP_MINUTES = 5;
 export const SLEEP_TARGET_HOURS = 8;
+export { DRIVE_LIMIT_HOURS, MOVE_METERS };
 
 const LIVE = ["started", "loading", "in_transit", "unloading"];
 const GAP_MS = TRACK_GAP_MINUTES * 60 * 1000;
@@ -28,12 +37,24 @@ export type DriverTracking = {
   sleepHours: number;
   sleepingSince: string | null;
   latest: TrackPoint | null;
+  movingHours: number;
+  moveCount: number;
+  drivingHours: number;
+  restDue: boolean;
+  liveMoveCount: number;
+  liveMovingHours: number;
+  liveSpeedKmh: number | null;
+  liveMoving: boolean;
+  onTrip: boolean;
+  dutyKey: string;
 };
 
 export type TrackingSnapshot = {
   keptDays: number;
   gapMinutes: number;
   sleepTargetHours: number;
+  driveLimitHours: number;
+  moveMeters: number;
   rows: DriverTracking[];
   trails: { tripId: string; driverId: string; points: TrackPoint[] }[];
 };
@@ -116,6 +137,9 @@ export async function recordLocation(
   latitude: number,
   longitude: number
 ) {
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    throw new Error("Location is not valid");
+  }
   await ready();
   const pool = getPool();
   const trip = await pool.query<{
@@ -134,26 +158,112 @@ export async function recordLocation(
   if (row.started_at && Date.now() - row.started_at.getTime() > TRACK_KEEP_DAYS * 24 * 60 * 60 * 1000) {
     throw new Error("This trip cannot be tracked after 10 days");
   }
-  const recent = await pool.query<{ recorded_at: Date }>(
-    `SELECT recorded_at FROM location_points
+  const recent = await pool.query<{ recorded_at: Date; latitude: number; longitude: number }>(
+    `SELECT recorded_at, latitude, longitude FROM location_points
      WHERE trip_id = $1
      ORDER BY recorded_at DESC
      LIMIT 1`,
     [tripId]
   );
-  const last = recent.rows[0]?.recorded_at;
-  if (last && Date.now() - last.getTime() < GAP_MS) return { stored: false };
+  const last = recent.rows[0];
+  if (last && Date.now() - last.recorded_at.getTime() < GAP_MS) {
+    return dutyStatus(companyId, driverId, tripId, false);
+  }
+  const now = Date.now();
+  const segment = last
+    ? segmentMove(
+        {
+          tripId,
+          latitude: Number(last.latitude),
+          longitude: Number(last.longitude),
+          at: last.recorded_at.getTime(),
+        },
+        { tripId, latitude, longitude, at: now }
+      )
+    : null;
   await pool.query(
-    `INSERT INTO location_points (company_id, vehicle_id, trip_id, driver_id, latitude, longitude, source)
-     VALUES ($1, $2, $3, $4, $5, $6, 'phone')`,
-    [companyId, row.vehicle_id, tripId, driverId, latitude, longitude]
+    `INSERT INTO location_points
+       (company_id, vehicle_id, trip_id, driver_id, latitude, longitude, speed_kmh, moving, source)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'phone')`,
+    [
+      companyId,
+      row.vehicle_id,
+      tripId,
+      driverId,
+      latitude,
+      longitude,
+      segment?.speedKmh ?? null,
+      segment?.moving ?? false,
+    ]
   );
   await pool.query(
     `DELETE FROM location_points
      WHERE company_id = $1 AND recorded_at < now() - ($2 || ' days')::interval`,
     [companyId, String(TRACK_KEEP_DAYS)]
   );
-  return { stored: true };
+  return dutyStatus(companyId, driverId, tripId, true);
+}
+
+export type DutyStatus = {
+  stored: boolean;
+  speedKmh: number | null;
+  moving: boolean;
+  moveCount: number;
+  drivingHours: number;
+  driveLimitHours: number;
+  restDue: boolean;
+  dutyKey: string;
+  restNotice: string | null;
+};
+
+async function dutyStatus(
+  companyId: string,
+  driverId: string,
+  tripId: string,
+  stored: boolean
+): Promise<DutyStatus> {
+  const motion = await driverMotion(companyId, driverId, tripId);
+  return {
+    stored,
+    speedKmh: motion.liveSpeedKmh,
+    moving: motion.liveMoving,
+    moveCount: motion.liveMoveCount,
+    drivingHours: motion.drivingHours,
+    driveLimitHours: DRIVE_LIMIT_HOURS,
+    restDue: motion.restDue,
+    dutyKey: motion.dutyKey,
+    restNotice: motion.restDue ? restMessage(motion.drivingHours) : null,
+  };
+}
+
+async function driverMotion(companyId: string, driverId: string, liveTripId: string | null) {
+  const pool = getPool();
+  const points = await pool.query<{ trip_id: string | null; latitude: number; longitude: number; recorded_at: Date }>(
+    `SELECT trip_id, latitude, longitude, recorded_at
+     FROM location_points
+     WHERE company_id = $1 AND driver_id = $2
+       AND recorded_at > now() - ($3 || ' days')::interval
+     ORDER BY recorded_at ASC`,
+    [companyId, driverId, String(TRACK_KEEP_DAYS)]
+  );
+  const sleeps = await pool.query<{ started_at: Date; ended_at: Date | null }>(
+    `SELECT started_at, ended_at
+     FROM hos_logs
+     WHERE company_id = $1 AND driver_id = $2 AND kind = 'sleep'
+       AND (ended_at IS NULL OR ended_at > now() - ($3 || ' days')::interval)`,
+    [companyId, driverId, String(TRACK_KEEP_DAYS)]
+  );
+  return summarizeMotion(
+    points.rows.map((point) => ({
+      tripId: point.trip_id,
+      latitude: Number(point.latitude),
+      longitude: Number(point.longitude),
+      at: point.recorded_at.getTime(),
+    })),
+    sleeps.rows.map((sleep) => ({ start: sleep.started_at.getTime(), end: sleep.ended_at?.getTime() ?? null })),
+    Date.now(),
+    liveTripId
+  );
 }
 
 export async function setSleep(companyId: string, driverId: string, wake: boolean) {
@@ -224,12 +334,22 @@ export async function trackingSnapshot(companyId: string, onlyDriverId: string |
     `SELECT driver_id, started_at, ended_at
      FROM hos_logs
      WHERE company_id = $1 AND kind = 'sleep'
-       AND started_at > now() - interval '2 days'
+       AND (ended_at IS NULL OR ended_at > now() - ($2 || ' days')::interval)
+       AND ($3::uuid IS NULL OR driver_id = $3)`,
+    [companyId, String(TRACK_KEEP_DAYS), onlyDriverId]
+  );
+  const liveTrips = await pool.query<{ id: string; driver_id: string }>(
+    `SELECT id, driver_id
+     FROM trips
+     WHERE company_id = $1 AND deleted_at IS NULL
+       AND status IN ('started', 'loading', 'in_transit', 'unloading')
        AND ($2::uuid IS NULL OR driver_id = $2)`,
     [companyId, onlyDriverId]
   );
   const now = Date.now();
+  const liveByDriver = new Map(liveTrips.rows.map((trip) => [trip.driver_id, trip.id]));
   const byDriver = new Map<string, { latitude: number; longitude: number; at: number }[]>();
+  const motionByDriver = new Map<string, MotionPoint[]>();
   const trails = new Map<string, { driverId: string; points: TrackPoint[] }>();
   const latest = new Map<string, TrackPoint>();
   for (const point of points.rows) {
@@ -238,6 +358,14 @@ export async function trackingSnapshot(companyId: string, onlyDriverId: string |
     const list = byDriver.get(point.driver_id) ?? [];
     list.push({ latitude: point.latitude, longitude: point.longitude, at });
     byDriver.set(point.driver_id, list);
+    const motion = motionByDriver.get(point.driver_id) ?? [];
+    motion.push({
+      tripId: point.trip_id,
+      latitude: Number(point.latitude),
+      longitude: Number(point.longitude),
+      at,
+    });
+    motionByDriver.set(point.driver_id, motion);
     const recordedAt = point.recorded_at.toISOString();
     latest.set(point.driver_id, {
       latitude: point.latitude,
@@ -262,6 +390,14 @@ export async function trackingSnapshot(companyId: string, onlyDriverId: string |
     const tripsFinished = finishedByDriver.get(driver.id) ?? 0;
     const rate = driver.pay_rate == null ? null : Number(driver.pay_rate);
     const rest = sleepHours(sleeps.rows, driver.id, now);
+    const motion = summarizeMotion(
+      motionByDriver.get(driver.id) ?? [],
+      sleeps.rows
+        .filter((sleep) => sleep.driver_id === driver.id)
+        .map((sleep) => ({ start: sleep.started_at.getTime(), end: sleep.ended_at?.getTime() ?? null })),
+      now,
+      liveByDriver.get(driver.id) ?? null
+    );
     return {
       driverId: driver.id,
       driverName: driver.full_name,
@@ -273,6 +409,16 @@ export async function trackingSnapshot(companyId: string, onlyDriverId: string |
       sleepHours: Math.round(rest.hours * 10) / 10,
       sleepingSince: rest.sleepingSince,
       latest: latest.get(driver.id) ?? null,
+      movingHours: motion.movingHours,
+      moveCount: motion.moveCount,
+      drivingHours: motion.drivingHours,
+      restDue: motion.restDue,
+      liveMoveCount: motion.liveMoveCount,
+      liveMovingHours: motion.liveMovingHours,
+      liveSpeedKmh: motion.liveSpeedKmh,
+      liveMoving: motion.liveMoving,
+      onTrip: liveByDriver.has(driver.id),
+      dutyKey: motion.dutyKey,
     };
   });
   rows.sort((left, right) => right.kilometres - left.kilometres || left.driverName.localeCompare(right.driverName));
@@ -280,6 +426,8 @@ export async function trackingSnapshot(companyId: string, onlyDriverId: string |
     keptDays: TRACK_KEEP_DAYS,
     gapMinutes: TRACK_GAP_MINUTES,
     sleepTargetHours: SLEEP_TARGET_HOURS,
+    driveLimitHours: DRIVE_LIMIT_HOURS,
+    moveMeters: MOVE_METERS,
     rows,
     trails: [...trails.entries()].map(([tripId, trail]) => ({
       tripId,
