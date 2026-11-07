@@ -3,7 +3,7 @@ import { requireFleet, saved } from "@/app/api/company/guard";
 import { ensureAuthSchema } from "@/lib/auth/schema";
 import { getSession } from "@/lib/auth/session";
 import { getWorkspace } from "@/lib/company/queries";
-import { parseVehicleInput } from "@/lib/company/validate";
+import { parseVehicleInput, parseVehiclePapers } from "@/lib/company/validate";
 import { addVehicle, vehicleLimitMessage } from "@/lib/company/vehicles";
 import { formatPgError } from "@/lib/db";
 
@@ -35,8 +35,9 @@ export async function POST(req: Request) {
   try {
     const access = await requireFleet("vehicles.write");
     if ("error" in access) return access.error;
-    const input = parseVehicleInput(await req.json());
-    const result = await addVehicle(access.workspace.company.id, input);
+    const body = await req.json();
+    const input = parseVehicleInput(body);
+    const result = await addVehicle(access.workspace.company.id, input, parseVehiclePapers(body));
     if (result === "limit") {
       return NextResponse.json(
         { error: vehicleLimitMessage(access.workspace.company.vehicleLimit) },

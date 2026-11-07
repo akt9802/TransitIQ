@@ -5,6 +5,7 @@ import { emailTrackingLink } from "@/lib/company/tracking-link";
 import { metersBetween, pickupAwayMessage, STOP_RANGE_METERS, stopAwayMessage } from "@/lib/company/geo";
 import { proofsForTrips } from "@/lib/company/proofs";
 import { costsForTrips, emptyTripCost } from "@/lib/company/trip-cost";
+import { assertTripPapers } from "@/lib/company/papers";
 import type { CustomerRecord, TripInput, TripRecord, TripStopInput, TripStopRecord } from "@/lib/company/types";
 import { LIVE_TRIP_STATUSES } from "@/lib/company/types";
 
@@ -202,8 +203,8 @@ async function assertAssignable(
   input: TripInput,
   excludeTripId: string | null
 ) {
-  const driver = await client.query<{ status: string; licence_expired: boolean }>(
-    `SELECT status, (license_expires_on IS NOT NULL AND license_expires_on < CURRENT_DATE) AS licence_expired
+  const driver = await client.query<{ status: string }>(
+    `SELECT status
      FROM drivers
      WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL
      FOR UPDATE`,
@@ -213,14 +214,6 @@ async function assertAssignable(
   if (!driverRow) throw new Error("Choose a driver in this fleet");
   if (driverRow.status === "on_leave") throw new Error("This driver is on leave");
   if (driverRow.status === "inactive") throw new Error("This driver is inactive");
-  if (driverRow.licence_expired) throw new Error("This driver's licence has expired");
-  const driverPaper = await client.query(
-    `SELECT 1 FROM driver_documents
-     WHERE driver_id = $1 AND company_id = $2 AND deleted_at IS NULL AND expires_on < CURRENT_DATE
-     LIMIT 1`,
-    [input.driverId, companyId]
-  );
-  if ((driverPaper.rowCount ?? 0) > 0) throw new Error("This driver has an expired document");
 
   const vehicle = await client.query<{ status: string }>(
     `SELECT status FROM vehicles
@@ -232,13 +225,7 @@ async function assertAssignable(
   if (!vehicleRow) throw new Error("Choose a truck in this fleet");
   if (vehicleRow.status === "retired") throw new Error("This truck is retired");
   if (vehicleRow.status === "maintenance") throw new Error("This truck is under maintenance");
-  const vehiclePaper = await client.query(
-    `SELECT 1 FROM vehicle_documents
-     WHERE vehicle_id = $1 AND company_id = $2 AND deleted_at IS NULL AND expires_on < CURRENT_DATE
-     LIMIT 1`,
-    [input.vehicleId, companyId]
-  );
-  if ((vehiclePaper.rowCount ?? 0) > 0) throw new Error("This truck has an expired document");
+  await assertTripPapers(client, companyId, input.driverId, input.vehicleId);
 
   const start = input.stops[0]?.scheduledAt;
   const end = input.stops[input.stops.length - 1]?.scheduledAt;

@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import { getPool } from "@/lib/db";
+import { paperLabel } from "@/lib/company/paper-rules";
 import type {
   ApiKeyRecord,
   AttendanceRecord,
@@ -377,7 +378,38 @@ export async function addVehiclePaper(companyId: string, input: PaperInput) {
   );
 }
 
+export async function updateVehiclePaper(
+  companyId: string,
+  id: string,
+  input: { documentNumber: string | null; expiresOn: string | null }
+) {
+  const current = await getPool().query<{ kind: string }>(
+    `SELECT kind FROM vehicle_documents WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
+    [id, companyId]
+  );
+  const kind = current.rows[0]?.kind;
+  if (!kind) throw new Error("That paper was not found");
+  if (["insurance", "permit", "fitness", "pollution"].includes(kind) && !input.expiresOn) {
+    throw new Error(`${paperLabel(kind)} expiry is required`);
+  }
+  const updated = await getPool().query(
+    `UPDATE vehicle_documents SET document_number = $3, expires_on = $4
+     WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
+    [id, companyId, input.documentNumber, input.expiresOn]
+  );
+  if (updated.rowCount !== 1) throw new Error("That paper was not found");
+}
+
 export async function removeVehiclePaper(companyId: string, id: string) {
+  const current = await getPool().query<{ kind: string }>(
+    `SELECT kind FROM vehicle_documents WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
+    [id, companyId]
+  );
+  const kind = current.rows[0]?.kind;
+  if (!kind) throw new Error("That paper was not found");
+  if (["rc", "insurance", "permit", "fitness", "pollution"].includes(kind)) {
+    throw new Error(`You cannot delete ${paperLabel(kind)}. Change the date on the truck.`);
+  }
   const updated = await getPool().query(
     `UPDATE vehicle_documents SET deleted_at = now()
      WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
@@ -404,6 +436,19 @@ export async function addDriverPaper(companyId: string, input: PaperInput) {
      VALUES ($1,$2,$3,$4,$5,$6)`,
     [companyId, input.parentId, input.kind, input.documentNumber, input.fileKey, input.expiresOn]
   );
+}
+
+export async function updateDriverPaper(
+  companyId: string,
+  id: string,
+  input: { documentNumber: string | null; expiresOn: string | null }
+) {
+  const updated = await getPool().query(
+    `UPDATE driver_documents SET document_number = $3, expires_on = $4
+     WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
+    [id, companyId, input.documentNumber, input.expiresOn]
+  );
+  if (updated.rowCount !== 1) throw new Error("That paper was not found");
 }
 
 export async function removeDriverPaper(companyId: string, id: string) {

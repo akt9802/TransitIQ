@@ -1,4 +1,5 @@
 import { getPool } from "@/lib/db";
+import { assertActiveVehiclePapers, writeVehiclePapers, type VehiclePaperDraft } from "@/lib/company/papers";
 import type { VehicleInput } from "@/lib/company/types";
 
 function isUnique(error: unknown): boolean {
@@ -62,7 +63,8 @@ async function assertPlacement(companyId: string, input: VehicleInput) {
 
 export async function addVehicle(
   companyId: string,
-  input: VehicleInput
+  input: VehicleInput,
+  papers: VehiclePaperDraft[] = []
 ): Promise<"created" | "limit"> {
   const pool = getPool();
   const client = await pool.connect();
@@ -85,14 +87,19 @@ export async function addVehicle(
       await client.query("ROLLBACK");
       return "limit";
     }
+    assertActiveVehiclePapers(input.status, papers);
     await assertPlacement(companyId, input);
-    await client.query(
+    const inserted = await client.query<{ id: string }>(
       `INSERT INTO vehicles (company_id, ${COLUMNS})
        VALUES (
          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
-       )`,
+       )
+       RETURNING id`,
       [companyId, ...values(input)]
     );
+    const vehicleId = inserted.rows[0]?.id;
+    if (!vehicleId) throw new Error("Could not add the truck");
+    await writeVehiclePapers(client, companyId, vehicleId, papers);
     await client.query("COMMIT");
     return "created";
   } catch (error) {
@@ -107,12 +114,16 @@ export async function addVehicle(
 export async function updateVehicle(
   companyId: string,
   vehicleId: string,
-  input: VehicleInput
+  input: VehicleInput,
+  papers: VehiclePaperDraft[] = []
 ): Promise<boolean> {
   const pool = getPool();
+  assertActiveVehiclePapers(input.status, papers);
+  const client = await pool.connect();
   try {
+    await client.query("BEGIN");
     await assertPlacement(companyId, input);
-    const updated = await pool.query(
+    const updated = await client.query(
       `UPDATE vehicles SET
          registration_number = $3,
          make = $4,
@@ -138,10 +149,19 @@ export async function updateVehicle(
        WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
       [vehicleId, companyId, ...values(input)]
     );
-    return updated.rowCount === 1;
+    if (updated.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return false;
+    }
+    await writeVehiclePapers(client, companyId, vehicleId, papers);
+    await client.query("COMMIT");
+    return true;
   } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
     if (isUnique(error)) throw new Error("This registration number is already in the fleet");
     throw error;
+  } finally {
+    client.release();
   }
 }
 

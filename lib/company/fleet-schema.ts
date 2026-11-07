@@ -161,5 +161,18 @@ export async function ensureFleetSchema(): Promise<void> {
       ADD CONSTRAINT hos_logs_kind_check CHECK (kind IN ('driving', 'rest', 'sleep'));
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS paper_reminder_sends (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      subject_key text NOT NULL,
+      expires_on date NOT NULL,
+      slot text NOT NULL CHECK (slot IN ('d30', 'd15', 'd7', 'morning', 'afternoon', 'evening')),
+      sent_on date NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (subject_key, expires_on, slot, sent_on)
+    );
+  `);
+
   fleetReady = true;
 }

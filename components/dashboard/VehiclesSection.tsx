@@ -3,7 +3,7 @@
 import { cloneElement, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { Alert } from "@/components/dashboard/frame";
-import PapersPanel from "@/components/dashboard/PapersPanel";
+import { indiaToday, vehiclePaperLine } from "@/lib/company/paper-rules";
 import {
   TRUCK_TYPES,
   VEHICLE_DOC_KINDS,
@@ -21,8 +21,32 @@ type Props = {
   papers: PaperRecord[];
 };
 
+type PaperDraft = { documentNumber: string; expiresOn: string };
+
+const EXPIRY_REQUIRED = new Set(["insurance", "permit", "fitness", "pollution"]);
+
+function blankPapers(): Record<string, PaperDraft> {
+  return Object.fromEntries(VEHICLE_DOC_KINDS.map((item) => [item.key, { documentNumber: "", expiresOn: "" }]));
+}
+
+function papersFor(vehicleId: string, rows: PaperRecord[]): Record<string, PaperDraft> {
+  const draft = blankPapers();
+  for (const row of rows) {
+    if (row.parentId !== vehicleId || !draft[row.kind]) continue;
+    const current = draft[row.kind];
+    if (row.expiresOn && (!current.expiresOn || row.expiresOn > current.expiresOn)) {
+      current.expiresOn = row.expiresOn;
+      if (row.documentNumber) current.documentNumber = row.documentNumber;
+    } else if (!current.documentNumber && row.documentNumber) {
+      current.documentNumber = row.documentNumber;
+    }
+  }
+  return draft;
+}
+
 type Draft = {
   id: string | null;
+  papers: Record<string, PaperDraft>;
   registrationNumber: string;
   truckType: string;
   ownership: string;
@@ -48,6 +72,7 @@ type Draft = {
 function blank(): Draft {
   return {
     id: null,
+    papers: blankPapers(),
     registrationNumber: "",
     truckType: "open",
     ownership: "owned",
@@ -71,10 +96,11 @@ function blank(): Draft {
   };
 }
 
-function fromVehicle(vehicle: VehicleRecord): Draft {
+function fromVehicle(vehicle: VehicleRecord, papers: PaperRecord[]): Draft {
   const text = (value: string | number | null) => (value == null ? "" : String(value));
   return {
     id: vehicle.id,
+    papers: papersFor(vehicle.id, papers),
     registrationNumber: vehicle.registrationNumber,
     truckType: vehicle.truckType,
     ownership: vehicle.ownership,
@@ -144,6 +170,14 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
     setError((current) => (current && fieldForError(current) === key ? null : current));
   }
 
+  function setPaper(kind: string, key: "documentNumber" | "expiresOn", value: string) {
+    setDraft((current) => {
+      if (!current) return current;
+      const paper = current.papers[kind] ?? { documentNumber: "", expiresOn: "" };
+      return { ...current, papers: { ...current.papers, [kind]: { ...paper, [key]: value } } };
+    });
+  }
+
   const errorField = error ? fieldForError(error) : null;
 
   async function save(e: React.FormEvent) {
@@ -152,10 +186,18 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
     setSaving(true);
     setError(null);
     try {
+      const { papers, ...vehicle } = draft;
       const res = await fetch(draft.id ? `/api/company/vehicles/${draft.id}` : "/api/company/vehicles", {
         method: draft.id ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
+        body: JSON.stringify({
+          ...vehicle,
+          papers: VEHICLE_DOC_KINDS.map((item) => ({
+            kind: item.key,
+            documentNumber: papers[item.key]?.documentNumber ?? "",
+            expiresOn: papers[item.key]?.expiresOn ?? "",
+          })),
+        }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Could not save");
@@ -287,6 +329,39 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
               </Field>
             </>
           ) : null}
+          <div className="sm:col-span-2 border-t border-ink/15 pt-4">
+            <h2 className="text-lg font-extrabold text-ink">Papers</h2>
+            <p className="mt-1 text-sm text-muted">
+              Insurance, permit, fitness, and pollution need an expiry before an active truck can take a trip. RC needs a number. Road tax can stay empty. Change the date here when a paper is renewed.
+            </p>
+            <div className="mt-4 grid gap-4">
+              {VEHICLE_DOC_KINDS.map((item) => {
+                const paper = draft.papers[item.key] ?? { documentNumber: "", expiresOn: "" };
+                const expiryRequired = EXPIRY_REQUIRED.has(item.key);
+                return (
+                  <div key={item.key} className="grid gap-3 border-2 border-ink p-3 sm:grid-cols-2">
+                    <label className={labelClass}>
+                      {item.label} number
+                      <input
+                        value={paper.documentNumber}
+                        onChange={(e) => setPaper(item.key, "documentNumber", e.target.value)}
+                        className={fieldClass}
+                      />
+                    </label>
+                    <label className={labelClass}>
+                      {expiryRequired ? `${item.label} expiry` : `${item.label} expiry, if it has one`}
+                      <input
+                        type="date"
+                        value={paper.expiresOn}
+                        onChange={(e) => setPaper(item.key, "expiresOn", e.target.value)}
+                        className={fieldClass}
+                      />
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
           <div className="flex flex-wrap gap-3 sm:col-span-2">
             <button type="submit" className={primaryBtn} disabled={saving}>
               {saving ? "Saving…" : draft.id ? "Save truck" : "Add truck"}
@@ -305,17 +380,6 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
           </div>
         </form>
       ) : null}
-      {draft?.id ? (
-        <PapersPanel
-          parentId={draft.id}
-          rows={papers}
-          kinds={VEHICLE_DOC_KINDS}
-          endpoint="/api/company/vehicle-documents"
-          canWrite={canWrite}
-          showIssued
-        />
-      ) : null}
-
       {vehicles.length === 0 ? (
         <p className="mt-4 text-sm text-ink-soft">No trucks yet.</p>
       ) : (
@@ -328,6 +392,7 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
                 <th scope="col" className="py-2 pr-4 font-bold">Type</th>
                 <th scope="col" className="py-2 pr-4 font-bold">Truck</th>
                 <th scope="col" className="py-2 pr-4 font-bold">Status</th>
+                <th scope="col" className="py-2 pr-4 font-bold">Papers</th>
                 <th scope="col" className="py-2 font-bold">Ownership</th>
               </tr>
             </thead>
@@ -340,6 +405,12 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
                     {[vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Not added"}
                   </td>
                   <td className="py-3 pr-4 text-ink">{labelFor(VEHICLE_STATUSES, vehicle.status)}</td>
+                  <td className="py-3 pr-4 text-ink">
+                    {vehiclePaperLine(
+                      papers.filter((paper) => paper.parentId === vehicle.id),
+                      indiaToday()
+                    )}
+                  </td>
                   <td className="py-3 text-ink">
                     <span className="mr-3">{labelFor(VEHICLE_OWNERSHIP, vehicle.ownership)}</span>
                     {canWrite ? (
@@ -348,7 +419,7 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
                         className="font-bold text-accent underline decoration-2 underline-offset-2"
                         onClick={() => {
                           setError(null);
-                          setDraft(fromVehicle(vehicle));
+                          setDraft(fromVehicle(vehicle, papers));
                         }}
                       >
                         Edit

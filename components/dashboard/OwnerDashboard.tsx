@@ -6,6 +6,7 @@ import DashboardNav, { type DashboardSection } from "@/components/dashboard/Dash
 import DriversSection from "@/components/dashboard/DriversSection";
 import FuelSection from "@/components/dashboard/FuelSection";
 import PeopleSection from "@/components/dashboard/PeopleSection";
+import PaperReminders from "@/components/dashboard/PaperReminders";
 import PerformanceSection from "@/components/dashboard/PerformanceSection";
 import TripTracker from "@/components/dashboard/TripTracker";
 import TripsSection from "@/components/dashboard/TripsSection";
@@ -163,6 +164,7 @@ export default function OwnerDashboard({
       ) : null}
 
       <div className="min-w-0 flex-1">
+      {hasCompany && workspace.owner.roleKey !== "driver" ? <PaperReminders /> : null}
       {!hasCompany || active === "company" ? (
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">

@@ -245,14 +245,52 @@ export function parseDriverInput(body: unknown): DriverInput {
     branchId: optionalUuid(raw.branchId, "Branch"),
     emergencyName: limited(raw.emergencyName, 120, "Emergency contact"),
     emergencyPhone: phone(raw.emergencyPhone, "Emergency phone"),
-    licenseNumber: limited(raw.licenseNumber, 40, "License number"),
+    licenseNumber: requiredLicense(raw.licenseNumber),
     licenseClass: limited(raw.licenseClass, 40, "License class"),
-    licenseExpiresOn: optionalDate(raw.licenseExpiresOn, "License expiry"),
+    licenseExpiresOn: requiredLicenseExpiry(raw.licenseExpiresOn),
     licenseEndorsements: limited(raw.licenseEndorsements, 200, "Endorsements"),
     payType: choice(raw.payType, PAY_TYPES, "Pay type", "per_trip"),
     payRate,
     status: choice(raw.status, DRIVER_STATUSES, "Status", "active"),
     userId: optionalUuid(raw.userId, "Sign-in"),
+  };
+}
+
+function requiredLicense(value: unknown): string {
+  const number = limited(value, 40, "License number");
+  if (!number) throw new Error("License number is required");
+  return number;
+}
+
+function requiredLicenseExpiry(value: unknown): string {
+  const expiry = optionalDate(value, "License expiry");
+  if (!expiry) throw new Error("License expiry is required");
+  return expiry;
+}
+
+export function parseVehiclePapers(body: unknown): { kind: string; documentNumber: string | null; expiresOn: string | null }[] {
+  const raw = asObject(body);
+  if (raw.papers == null) return [];
+  if (!Array.isArray(raw.papers)) throw new Error("Papers are not valid");
+  const seen = new Set<string>();
+  return raw.papers.map((item) => {
+    const row = asObject(item);
+    const kind = choice(row.kind, VEHICLE_DOC_KINDS, "Paper");
+    if (seen.has(kind)) throw new Error("Choose each paper once");
+    seen.add(kind);
+    return {
+      kind,
+      documentNumber: limited(row.documentNumber, 40, "Document number"),
+      expiresOn: optionalDate(row.expiresOn, "Expires on"),
+    };
+  });
+}
+
+export function parsePaperUpdate(body: unknown): { documentNumber: string | null; expiresOn: string | null } {
+  const raw = asObject(body);
+  return {
+    documentNumber: limited(raw.documentNumber, 40, "Document number"),
+    expiresOn: optionalDate(raw.expiresOn, "Expires on"),
   };
 }
 

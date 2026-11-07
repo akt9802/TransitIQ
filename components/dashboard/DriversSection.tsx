@@ -93,7 +93,7 @@ export default function DriversSection({
   return (
     <SectionCard
       title="Drivers"
-      caption="Everyone with the Driver role. Open one to add a licence, pay, and papers."
+      caption="Add the licence number and expiry with the driver. Change the expiry here when the licence is renewed."
       action={
         canWrite && !draft ? (
           <button type="button" className={quietBtn} onClick={() => { setError(null); setDraft(blank()); }}>
@@ -128,9 +128,9 @@ export default function DriversSection({
           </Field>
           <Field label="Emergency contact"><input value={draft.emergencyName} onChange={(e) => set("emergencyName", e.target.value)} className={fieldClass} /></Field>
           <Field label="Emergency phone"><input value={draft.emergencyPhone} onChange={(e) => set("emergencyPhone", e.target.value)} className={fieldClass} inputMode="tel" /></Field>
-          <Field label="License number"><input value={draft.licenseNumber} onChange={(e) => set("licenseNumber", e.target.value)} className={fieldClass} /></Field>
+          <Field label="License number"><input required value={draft.licenseNumber} onChange={(e) => set("licenseNumber", e.target.value)} className={fieldClass} /></Field>
           <Field label="License class"><input value={draft.licenseClass} onChange={(e) => set("licenseClass", e.target.value)} className={fieldClass} /></Field>
-          <Field label="License expiry"><input type="date" value={draft.licenseExpiresOn} onChange={(e) => set("licenseExpiresOn", e.target.value)} className={fieldClass} /></Field>
+          <Field label="License expiry"><input required type="date" value={draft.licenseExpiresOn} onChange={(e) => set("licenseExpiresOn", e.target.value)} className={fieldClass} /></Field>
           <Field label="Endorsements"><input value={draft.licenseEndorsements} onChange={(e) => set("licenseEndorsements", e.target.value)} className={fieldClass} /></Field>
           <Field label="Pay">
             <select value={draft.payType} onChange={(e) => set("payType", e.target.value)} className={fieldClass}>

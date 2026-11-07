@@ -24,12 +24,20 @@ export default function PapersPanel({
 }) {
   const { error, setError, saving, submit } = useFleetSave();
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [kind, setKind] = useState(kinds[0]?.key ?? "");
   const [documentNumber, setDocumentNumber] = useState("");
-  const [fileKey, setFileKey] = useState("");
   const [issuedOn, setIssuedOn] = useState("");
   const [expiresOn, setExpiresOn] = useState("");
   const mine = rows.filter((row) => row.parentId === parentId);
+
+  function close() {
+    setOpen(false);
+    setEditingId(null);
+    setDocumentNumber("");
+    setIssuedOn("");
+    setExpiresOn("");
+  }
 
   return (
     <div className="mt-6 border-t border-ink/15 pt-4 sm:col-span-2">
@@ -47,25 +55,18 @@ export default function PapersPanel({
           className="mt-4 grid gap-4 sm:grid-cols-2"
           onSubmit={async (e) => {
             e.preventDefault();
-            const ok = await submit(endpoint, "POST", {
+            const ok = await submit(editingId ? `${endpoint}/${editingId}` : endpoint, editingId ? "PATCH" : "POST", {
               parentId,
               kind,
               documentNumber,
-              fileKey,
               issuedOn,
               expiresOn,
             });
-            if (ok) {
-              setOpen(false);
-              setDocumentNumber("");
-              setFileKey("");
-              setIssuedOn("");
-              setExpiresOn("");
-            }
+            if (ok) close();
           }}
         >
           <Field label="Kind">
-            <select value={kind} onChange={(e) => setKind(e.target.value)} className={fieldClass}>
+            <select value={kind} onChange={(e) => setKind(e.target.value)} className={fieldClass} disabled={Boolean(editingId)}>
               {kinds.map((item) => (
                 <option key={item.key} value={item.key}>{item.label}</option>
               ))}
@@ -82,12 +83,9 @@ export default function PapersPanel({
           <Field label="Expires on">
             <input type="date" value={expiresOn} onChange={(e) => setExpiresOn(e.target.value)} className={fieldClass} />
           </Field>
-          <Field label="File reference">
-            <input value={fileKey} onChange={(e) => setFileKey(e.target.value)} className={fieldClass} />
-          </Field>
           <div className="flex gap-3 sm:col-span-2">
-            <button type="submit" className={quietBtn} disabled={saving}>Save paper</button>
-            <button type="button" className={quietBtn} onClick={() => setOpen(false)}>Cancel</button>
+            <button type="submit" className={quietBtn} disabled={saving}>{editingId ? "Save date" : "Save paper"}</button>
+            <button type="button" className={quietBtn} onClick={close}>Cancel</button>
           </div>
         </form>
       ) : null}
@@ -103,7 +101,24 @@ export default function PapersPanel({
                 {paper.expiresOn ? ` · expires ${paper.expiresOn}` : ""}
               </span>
               {canWrite ? (
-                <RemoveButton disabled={saving} onClick={() => submit(`${endpoint}/${paper.id}`, "DELETE")} />
+                <span className="flex gap-3">
+                  <button
+                    type="button"
+                    className="font-bold text-accent underline decoration-2 underline-offset-2"
+                    onClick={() => {
+                      setError(null);
+                      setEditingId(paper.id);
+                      setKind(paper.kind);
+                      setDocumentNumber(paper.documentNumber ?? "");
+                      setIssuedOn(paper.issuedOn ?? "");
+                      setExpiresOn(paper.expiresOn ?? "");
+                      setOpen(true);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <RemoveButton disabled={saving} onClick={() => submit(`${endpoint}/${paper.id}`, "DELETE")} />
+                </span>
               ) : null}
             </li>
           ))}
