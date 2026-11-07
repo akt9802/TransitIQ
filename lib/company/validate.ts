@@ -43,6 +43,13 @@ function limited(value: unknown, max: number, label: string): string | null {
   return trimmed;
 }
 
+function emailAddress(value: unknown): string {
+  const trimmed = limited(value, 200, "Customer email");
+  if (!trimmed) throw new Error("Customer email is required");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) throw new Error("Customer email is not valid");
+  return trimmed.toLowerCase();
+}
+
 function phone(value: unknown, label: string): string | null {
   const trimmed = limited(value, 20, label);
   if (!trimmed) return null;
@@ -382,6 +389,7 @@ export function parseTripInput(body: unknown): TripInput {
     customerId,
     customerName,
     customerPhone: phone(raw.customerPhone, "Customer phone"),
+    customerEmail: emailAddress(raw.customerEmail),
     loadType: limited(raw.loadType, 80, "Load"),
     weightKg: optionalNumber(raw.weightKg, "Weight", 200000),
     deadlineAt: text(raw.deadlineAt) ? requiredInstant(raw.deadlineAt, "Deadline") : null,

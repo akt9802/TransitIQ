@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { otpEmailHtml, otpEmailSubject, otpEmailText } from "@/lib/mail/otpTemplate";
+import { trackingEmailHtml, trackingEmailSubject, trackingEmailText } from "@/lib/mail/trackingTemplate";
 
 function smtpAuthError(e: unknown): string {
   const message = e instanceof Error ? e.message : String(e);
@@ -35,6 +36,51 @@ function getTransport() {
 }
 
 export type SendOtpResult = { delivered: boolean; error?: string };
+
+export async function sendTrackingEmail(input: {
+  to: string;
+  companyName: string;
+  customerName: string;
+  link: string;
+  vehicle: string | null;
+  pickup: string | null;
+  dropoff: string | null;
+}): Promise<SendOtpResult> {
+  const from = process.env.SMTP_FROM_EMAIL ?? "noreply@akt9802.in";
+  const name = process.env.SMTP_FROM_NAME ?? "TransitIQ";
+  const replyTo = process.env.SMTP_REPLY_TO?.trim() || from;
+  const mail = {
+    companyName: input.companyName,
+    customerName: input.customerName,
+    link: input.link,
+    vehicle: input.vehicle,
+    pickup: input.pickup,
+    dropoff: input.dropoff,
+  };
+  try {
+    const transport = getTransport();
+    await transport.sendMail({
+      from: `"${name}" <${from}>`,
+      replyTo,
+      to: input.to,
+      subject: trackingEmailSubject(input.companyName),
+      text: trackingEmailText(mail),
+      html: trackingEmailHtml(mail),
+      headers: {
+        "Auto-Submitted": "auto-generated",
+        "X-Auto-Response-Suppress": "All",
+      },
+    });
+    return { delivered: true };
+  } catch (e) {
+    const error = smtpAuthError(e);
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(`[dev] SMTP failed: ${error}`);
+      console.warn(`[dev] Tracking link for ${input.to}: ${input.link}`);
+    }
+    return { delivered: false, error };
+  }
+}
 
 export async function sendOtpEmail(
   to: string,

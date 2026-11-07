@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireMember, saved } from "@/app/api/company/guard";
 import { getPool } from "@/lib/db";
 import { changeTripStatus } from "@/lib/company/trips";
+import { requestOrigin } from "@/lib/company/tracking-link";
 import { parseTripStatus } from "@/lib/company/validate";
 
 type Context = { params: Promise<{ id: string }> };
@@ -39,11 +40,12 @@ export async function POST(req: Request, context: Context) {
         return NextResponse.json({ error: "That trip is not assigned to you" }, { status: 403 });
       }
     }
-    await changeTripStatus(company.id, id, status, {
+    const sent = await changeTripStatus(company.id, id, status, {
       here: hereFrom(body),
       enforcePlace: !writer,
+      origin: requestOrigin(req),
     });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, ...sent });
   } catch (error) {
     return saved(error, "trips.write");
   }

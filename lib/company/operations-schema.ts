@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { getPool } from "@/lib/db";
 
 let operationsReady = false;
@@ -218,6 +219,21 @@ export async function ensureOperationsSchema(): Promise<void> {
     ALTER TABLE fleet_users
       ADD COLUMN IF NOT EXISTS customer_id uuid REFERENCES customers(id)
   `);
+
+  await pool.query(`
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS tracking_token text;
+    CREATE UNIQUE INDEX IF NOT EXISTS trips_tracking_token ON trips (tracking_token) WHERE tracking_token IS NOT NULL;
+  `);
+
+  const missingTokens = await pool.query<{ id: string }>(
+    `SELECT id FROM trips WHERE tracking_token IS NULL`
+  );
+  for (const row of missingTokens.rows) {
+    await pool.query(
+      `UPDATE trips SET tracking_token = $2 WHERE id = $1 AND tracking_token IS NULL`,
+      [row.id, randomBytes(24).toString("base64url")]
+    );
+  }
 
   await pool.query(`
     INSERT INTO permissions (key, description) VALUES

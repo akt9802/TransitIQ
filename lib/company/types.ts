@@ -332,6 +332,7 @@ export type CustomerRecord = {
   id: string;
   name: string;
   phone: string | null;
+  email: string | null;
 };
 
 export type TripStopRecord = {
@@ -367,6 +368,8 @@ export type TripRecord = {
   orderId: string | null;
   customerId: string | null;
   customerName: string;
+  customerEmail: string | null;
+  trackingToken: string | null;
   loadType: string | null;
   weightKg: number | null;
   deadlineAt: string | null;
@@ -391,6 +394,7 @@ export type TripInput = {
   customerId: string | null;
   customerName: string | null;
   customerPhone: string | null;
+  customerEmail: string;
   loadType: string | null;
   weightKg: number | null;
   deadlineAt: string | null;

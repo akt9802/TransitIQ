@@ -1,5 +1,7 @@
+import { randomBytes } from "crypto";
 import type { PoolClient } from "pg";
 import { getPool } from "@/lib/db";
+import { emailTrackingLink } from "@/lib/company/tracking-link";
 import { metersBetween, pickupAwayMessage, STOP_RANGE_METERS, stopAwayMessage } from "@/lib/company/geo";
 import { proofsForTrips } from "@/lib/company/proofs";
 import type { CustomerRecord, TripInput, TripRecord, TripStopInput, TripStopRecord } from "@/lib/company/types";
@@ -24,6 +26,8 @@ type TripRow = {
   order_id: string | null;
   customer_id: string | null;
   customer_name: string | null;
+  customer_email: string | null;
+  tracking_token: string | null;
   load_type: string | null;
   weight_kg: string | number | null;
   deadline_at: Date | string | null;
@@ -75,6 +79,8 @@ function toTrip(row: TripRow): TripRecord {
     orderId: row.order_id,
     customerId: row.customer_id,
     customerName: row.customer_name ?? "Customer",
+    customerEmail: row.customer_email,
+    trackingToken: row.tracking_token,
     loadType: row.load_type,
     weightKg: asNumber(row.weight_kg),
     deadlineAt: asInstant(row.deadline_at),
@@ -110,7 +116,7 @@ function toTrip(row: TripRow): TripRecord {
 
 export async function listCustomers(companyId: string): Promise<CustomerRecord[]> {
   const { rows } = await getPool().query<CustomerRecord>(
-    `SELECT id, name, phone FROM customers
+    `SELECT id, name, phone, email FROM customers
      WHERE company_id = $1 AND deleted_at IS NULL
      ORDER BY name ASC`,
     [companyId]
@@ -120,7 +126,7 @@ export async function listCustomers(companyId: string): Promise<CustomerRecord[]
 
 export async function listTrips(companyId: string, driverId?: string | null): Promise<TripRecord[]> {
   const { rows } = await getPool().query<TripRow>(
-    `SELECT t.id, t.order_id, t.customer_id, c.name AS customer_name,
+    `SELECT t.id, t.order_id, t.customer_id, c.name AS customer_name, c.email AS customer_email, t.tracking_token,
             o.load_type, o.weight_kg, o.deadline_at, o.notes, o.status AS order_status,
             t.vehicle_id, v.registration_number, t.driver_id, d.full_name AS driver_name,
             t.status, t.eta_at, t.started_at, t.completed_at, t.closed_at, t.empty_run, t.created_at,
@@ -148,7 +154,7 @@ export async function listTrips(companyId: string, driverId?: string | null): Pr
      LEFT JOIN trip_stops s ON s.trip_id = t.id
      WHERE t.company_id = $1 AND t.deleted_at IS NULL
        AND ($2::uuid IS NULL OR t.driver_id = $2)
-     GROUP BY t.id, c.name, o.load_type, o.weight_kg, o.deadline_at, o.notes, o.status,
+     GROUP BY t.id, c.name, c.email, o.load_type, o.weight_kg, o.deadline_at, o.notes, o.status,
               v.registration_number, d.full_name
      ORDER BY t.created_at DESC`,
     [companyId, driverId ?? null]
@@ -166,11 +172,15 @@ async function resolveCustomer(client: PoolClient, companyId: string, input: Tri
       [input.customerId, companyId]
     );
     if (!found.rowCount) throw new Error("Choose a customer in this fleet");
+    await client.query(
+      `UPDATE customers SET email = $3, updated_at = now() WHERE id = $1 AND company_id = $2`,
+      [input.customerId, companyId, input.customerEmail]
+    );
     return input.customerId;
   }
   const created = await client.query<{ id: string }>(
-    `INSERT INTO customers (company_id, name, phone) VALUES ($1, $2, $3) RETURNING id`,
-    [companyId, input.customerName, input.customerPhone]
+    `INSERT INTO customers (company_id, name, phone, email) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [companyId, input.customerName, input.customerPhone, input.customerEmail]
   );
   return created.rows[0].id;
 }
@@ -300,10 +310,10 @@ export async function createTrip(companyId: string, input: TripInput) {
     const orderId = order.rows[0].id;
     const trip = await client.query<{ id: string }>(
       `INSERT INTO trips (
-         company_id, order_id, customer_id, vehicle_id, driver_id, status, eta_at, empty_run
-       ) VALUES ($1, $2, $3, $4, $5, 'assigned', $6, $7)
+         company_id, order_id, customer_id, vehicle_id, driver_id, status, eta_at, empty_run, tracking_token
+       ) VALUES ($1, $2, $3, $4, $5, 'assigned', $6, $7, $8)
        RETURNING id`,
-      [companyId, orderId, customerId, input.vehicleId, input.driverId, input.etaAt, input.emptyRun]
+      [companyId, orderId, customerId, input.vehicleId, input.driverId, input.etaAt, input.emptyRun, randomBytes(24).toString("base64url")]
     );
     await insertStops(client, companyId, trip.rows[0].id, input.stops);
   });
@@ -311,10 +321,12 @@ export async function createTrip(companyId: string, input: TripInput) {
 
 export async function updateTrip(companyId: string, tripId: string, input: TripInput) {
   await withTrip(async (client) => {
-    const current = await client.query<{ status: string; order_id: string | null }>(
-      `SELECT status, order_id FROM trips
-       WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL
-       FOR UPDATE`,
+    const current = await client.query<{ status: string; order_id: string | null; email: string | null }>(
+      `SELECT t.status, t.order_id, c.email
+       FROM trips t
+       LEFT JOIN customers c ON c.id = t.customer_id
+       WHERE t.id = $1 AND t.company_id = $2 AND t.deleted_at IS NULL
+       FOR UPDATE OF t`,
       [tripId, companyId]
     );
     const trip = current.rows[0];
@@ -378,8 +390,9 @@ export async function changeTripStatus(
   companyId: string,
   tripId: string,
   status: string,
-  options?: { here?: Here | null; enforcePlace?: boolean }
+  options?: { here?: Here | null; enforcePlace?: boolean; origin?: string }
 ) {
+  let justStarted = false;
   await withTrip(async (client) => {
     const current = await client.query<{
       status: string;
@@ -413,6 +426,7 @@ export async function changeTripStatus(
           customerId: null,
           customerName: null,
           customerPhone: null,
+          customerEmail: "",
           loadType: null,
           weightKg: null,
           deadlineAt: null,
@@ -457,6 +471,7 @@ export async function changeTripStatus(
          WHERE id = $1 AND company_id = $2 AND status NOT IN ('retired', 'maintenance')`,
         [trip.vehicle_id, companyId]
       );
+      justStarted = true;
       return;
     }
 
@@ -576,6 +591,15 @@ export async function changeTripStatus(
 
     await client.query(`UPDATE trips SET status = $2, updated_at = now() WHERE id = $1`, [tripId, status]);
   });
+  if (!justStarted || !options?.origin) return { emailed: false, emailError: null };
+  try {
+    return await emailTrackingLink({ companyId, tripId, origin: options.origin });
+  } catch (error) {
+    return {
+      emailed: false,
+      emailError: error instanceof Error ? error.message : "The tracking email could not be sent",
+    };
+  }
 }
 
 export async function markStopReached(companyId: string, tripId: string, here: Here) {

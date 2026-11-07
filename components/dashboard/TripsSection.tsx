@@ -1,6 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import AdminLiveTrips from "@/components/dashboard/AdminLiveTrips";
 import { Modal } from "@/components/Modal";
 import { Actions, Alert, Field, SectionCard, useFleetSave } from "@/components/dashboard/frame";
 import { ProofStrip } from "@/components/dashboard/ProofPhotos";
@@ -31,6 +33,7 @@ type Draft = {
   customerId: string;
   customerName: string;
   customerPhone: string;
+  customerEmail: string;
   loadType: string;
   weightKg: string;
   deadlineAt: string;
@@ -67,6 +70,7 @@ function blank(): Draft {
     customerId: "",
     customerName: "",
     customerPhone: "",
+    customerEmail: "",
     loadType: "",
     weightKg: "",
     deadlineAt: "",
@@ -225,6 +229,7 @@ export default function TripsSection({
   canWrite: boolean;
   ownDriverId: string | null;
 }) {
+  const router = useRouter();
   const { error, setError, saving, submit } = useFleetSave();
   const formRef = useRef<HTMLFormElement>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -233,6 +238,11 @@ export default function TripsSection({
   const booking = draft ? draftWindow(draft.stops) : null;
   const busyDrivers = booking ? bookedIds(trips, draft?.id ?? null, booking, "driverId") : new Set<string>();
   const busyTrucks = booking ? bookedIds(trips, draft?.id ?? null, booking, "vehicleId") : new Set<string>();
+  useEffect(() => {
+    if (ownDriverId) return;
+    const interval = window.setInterval(() => router.refresh(), 20000);
+    return () => window.clearInterval(interval);
+  }, [ownDriverId, router]);
   const myLive = ownDriverId
     ? trips.find((trip) => trip.driverId === ownDriverId && LIVE.has(trip.status)) ?? null
     : null;
@@ -270,6 +280,7 @@ export default function TripsSection({
       customerId: trip.customerId ?? "",
       customerName: trip.customerName,
       customerPhone: "",
+      customerEmail: trip.customerEmail ?? "",
       loadType: trip.loadType ?? "",
       weightKg: trip.weightKg == null ? "" : String(trip.weightKg),
       deadlineAt: toLocal(trip.deadlineAt),
@@ -299,6 +310,7 @@ export default function TripsSection({
       customerId: trip.customerId ?? "",
       customerName: trip.customerName,
       customerPhone: "",
+      customerEmail: trip.customerEmail ?? "",
       loadType: trip.loadType ?? "",
       weightKg: trip.weightKg == null ? "" : String(trip.weightKg),
       deadlineAt: "",
@@ -328,6 +340,7 @@ export default function TripsSection({
       customerId: draft.customerId || null,
       customerName: draft.customerName,
       customerPhone: draft.customerPhone,
+      customerEmail: draft.customerEmail,
       loadType: draft.loadType,
       weightKg: draft.weightKg,
       deadlineAt: draft.deadlineAt,
@@ -387,10 +400,13 @@ export default function TripsSection({
       await submit(`/api/company/trips/${trip.id}/arrive`, "POST", here);
       return;
     }
-    await submit(`/api/company/trips/${trip.id}/status`, "POST", {
+    const saved = await submit(`/api/company/trips/${trip.id}/status`, "POST", {
       status: action,
       ...(here ?? {}),
     });
+    if (action === "started" && saved && (saved as { emailError?: string | null }).emailError) {
+      setError("The trip started. The tracking email could not be sent. Use Send again on the trip.");
+    }
   }
 
   return (
@@ -427,6 +443,8 @@ export default function TripsSection({
         </div>
       ) : null}
 
+      {ownDriverId ? null : <AdminLiveTrips trips={trips} />}
+
       {myLive ? (
         <DriverRoute trip={myLive} busy={saving} onProgress={(action) => progress(myLive, action)} />
       ) : null}
@@ -441,7 +459,15 @@ export default function TripsSection({
             </p>
           ) : null}
           <Field label="Customer">
-            <select value={draft.customerId} onChange={(e) => setDraft({ ...draft, customerId: e.target.value })} className={fieldClass}>
+            <select
+              value={draft.customerId}
+              onChange={(e) => {
+                const customerId = e.target.value;
+                const customer = customers.find((item) => item.id === customerId);
+                setDraft({ ...draft, customerId, customerEmail: customer?.email ?? "" });
+              }}
+              className={fieldClass}
+            >
               <option value="">New customer</option>
               {customers.map((customer) => (
                 <option key={customer.id} value={customer.id}>{customer.name}</option>
@@ -458,6 +484,18 @@ export default function TripsSection({
               </Field>
             </>
           )}
+          <Field label="Customer email">
+            <input
+              required
+              type="email"
+              value={draft.customerEmail}
+              onChange={(e) => setDraft({ ...draft, customerEmail: e.target.value })}
+              className={fieldClass}
+            />
+          </Field>
+          <p className="text-sm text-muted sm:col-span-2">
+            This address receives the tracking link when the trip starts. The page shows status, the latest place, and the trip photos. It stops when the shipment is delivered.
+          </p>
           <Field label="Load">
             <input value={draft.loadType} onChange={(e) => setDraft({ ...draft, loadType: e.target.value })} className={fieldClass} />
           </Field>
@@ -607,6 +645,8 @@ export default function TripsSection({
       />
       <TripGroup
         title="History"
+        caption="Finished, closed, and canceled trips."
+        emphasis
         empty="No past trips."
         trips={history}
         queue={queue}
@@ -636,6 +676,71 @@ function FilterButton({ current, label, onClick }: { current: boolean; label: st
   );
 }
 
+function TrackingShare({ trip }: { trip: TripRecord }) {
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const ended = trip.status === "completed" || trip.status === "closed" || trip.status === "canceled";
+  const waiting = trip.status === "created" || trip.status === "assigned";
+  const href = trip.trackingToken ? `/track/${trip.trackingToken}` : "";
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${href}`);
+      setNote("Link copied");
+    } catch {
+      setNote("Copy the link from the address above");
+    }
+  }
+
+  async function resend() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const response = await fetch(`/api/company/trips/${trip.id}/tracking`, { method: "POST" });
+      const body = (await response.json()) as { error?: string; emailError?: string | null };
+      if (!response.ok) throw new Error(body.error ?? "The tracking email could not be sent");
+      if (body.emailError) throw new Error("The tracking email could not be sent. Copy the link instead.");
+      setNote(trip.customerEmail ? `Sent to ${trip.customerEmail}` : "Sent");
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "The tracking email could not be sent");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!href) return null;
+  if (ended) {
+    return (
+      <p className="mt-3 text-sm text-ink">
+        {trip.status === "canceled"
+          ? "The customer link ended because the shipment was canceled."
+          : "The customer link ended when the shipment was delivered."}
+      </p>
+    );
+  }
+  return (
+    <div className="mt-3 space-y-2">
+      <p className="text-sm text-ink">
+        {waiting
+          ? "The customer receives this link when the trip starts. "
+          : trip.customerEmail
+            ? `Tracking email goes to ${trip.customerEmail}. `
+            : "Add a customer email before the next start. "}
+        <a className="break-all font-extrabold text-ink" href={href}>{href}</a>
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={quietBtn} onClick={() => void copy()}>Copy link</button>
+        {trip.customerEmail ? (
+          <button type="button" className={quietBtn} disabled={busy} onClick={() => void resend()}>
+            {busy ? "Sending" : "Send again"}
+          </button>
+        ) : null}
+      </div>
+      {note ? <p className="text-sm text-ink">{note}</p> : null}
+    </div>
+  );
+}
+
 function TripCard({
   trip,
   queue,
@@ -643,6 +748,7 @@ function TripCard({
   canWrite,
   ownDriverId,
   saving,
+  past,
   onEdit,
   onCopy,
   onStatus,
@@ -653,6 +759,7 @@ function TripCard({
   canWrite: boolean;
   ownDriverId: string | null;
   saving: boolean;
+  past?: boolean;
   onEdit: (trip: TripRecord) => void;
   onCopy?: (trip: TripRecord) => void;
   onStatus: (trip: TripRecord, status: string) => void;
@@ -680,10 +787,10 @@ function TripCard({
   ].filter(Boolean);
 
   return (
-    <li className="border-2 border-ink bg-paper p-4">
+    <li className={past ? "border-2 border-ink bg-paper-subtle p-5 sm:p-6" : "border-2 border-ink bg-paper p-4"}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-lg font-extrabold text-ink">{trip.customerName}</h3>
+          <h3 className={past ? "text-2xl font-extrabold text-ink" : "text-lg font-extrabold text-ink"}>{trip.customerName}</h3>
           <p className="mt-1 text-sm text-muted">{facts.join(" · ")}</p>
         </div>
         <span className="rounded-md border-2 border-ink px-2 py-1 text-xs font-extrabold uppercase tracking-wider text-ink">
@@ -722,6 +829,7 @@ function TripCard({
         })}
       </ol>
       {trip.notes ? <p className="mt-3 text-sm text-ink">{trip.notes}</p> : null}
+      {!ownDriverId ? <TrackingShare trip={trip} /> : null}
       <ProofStrip proofs={trip.proofs ?? []} />
       {canMove || (canWrite && onCopy) ? (
         <div className="mt-4 flex flex-wrap gap-2">
@@ -802,6 +910,8 @@ function TripCard({
 
 function TripGroup({
   title,
+  caption,
+  emphasis,
   empty,
   trips,
   queue,
@@ -814,6 +924,8 @@ function TripGroup({
   onStatus,
 }: {
   title: string;
+  caption?: string;
+  emphasis?: boolean;
   empty: string;
   trips: TripRecord[];
   queue: TripRecord[];
@@ -826,10 +938,11 @@ function TripGroup({
   onStatus: (trip: TripRecord, status: string) => void;
 }) {
   return (
-    <div className="mt-6">
-      <h2 className="text-lg font-extrabold text-ink">{title}</h2>
+    <div className={emphasis ? "mt-10 border-t-4 border-ink pt-6" : "mt-6"}>
+      <h2 className={emphasis ? "text-3xl font-extrabold text-ink" : "text-lg font-extrabold text-ink"}>{title}</h2>
+      {caption ? <p className="mt-1 text-sm text-muted">{caption}</p> : null}
       {trips.length === 0 ? <p className="mt-2 text-sm text-ink-soft">{empty}</p> : (
-        <ul className="mt-3 space-y-3">
+        <ul className={emphasis ? "mt-4 space-y-4" : "mt-3 space-y-3"}>
           {trips.map((trip) => (
             <TripCard
               key={trip.id}
@@ -839,6 +952,7 @@ function TripGroup({
               canWrite={canWrite}
               ownDriverId={ownDriverId}
               saving={saving}
+              past={emphasis}
               onEdit={onEdit}
               onCopy={onCopy}
               onStatus={onStatus}

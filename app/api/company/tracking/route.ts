@@ -10,8 +10,8 @@ export async function GET() {
     if (!permissions.includes("trips.read")) {
       return NextResponse.json({ error: "You can't change this" }, { status: 403 });
     }
-    const onlyDriver = permissions.includes("trips.write") ? null : owner.driverId;
-    if (!permissions.includes("trips.write") && !onlyDriver) {
+    const onlyDriver = owner.roleKey === "driver" ? owner.driverId : null;
+    if (owner.roleKey === "driver" && !onlyDriver) {
       return NextResponse.json({
         keptDays: 10,
         gapMinutes: 5,
