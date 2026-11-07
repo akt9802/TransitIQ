@@ -135,6 +135,7 @@ export async function ensureOperationsSchema(): Promise<void> {
       vehicle_id uuid NOT NULL REFERENCES vehicles(id),
       driver_id uuid REFERENCES drivers(id),
       trip_id uuid REFERENCES trips(id),
+      timing text NOT NULL DEFAULT 'no_trip' CHECK (timing IN ('before_trip', 'on_trip', 'after_trip', 'no_trip')),
       filled_at timestamptz NOT NULL DEFAULT now(),
       litres numeric(12,3) NOT NULL,
       amount numeric(12,2) NOT NULL,
@@ -147,11 +148,52 @@ export async function ensureOperationsSchema(): Promise<void> {
       deleted_at timestamptz
     );
     CREATE INDEX IF NOT EXISTS idx_fuel_entries_company ON fuel_entries(company_id, filled_at DESC);
+
+    CREATE TABLE IF NOT EXISTS extra_costs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      vehicle_id uuid NOT NULL REFERENCES vehicles(id),
+      driver_id uuid REFERENCES drivers(id),
+      trip_id uuid REFERENCES trips(id),
+      timing text NOT NULL CHECK (timing IN ('before_trip', 'on_trip', 'after_trip', 'no_trip')),
+      kind text NOT NULL CHECK (kind IN ('puncture', 'engine', 'other')),
+      amount numeric(12,2) NOT NULL,
+      details text NOT NULL,
+      image bytea NOT NULL,
+      latitude double precision,
+      longitude double precision,
+      spent_at timestamptz NOT NULL DEFAULT now(),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      deleted_at timestamptz
+    );
+    CREATE INDEX IF NOT EXISTS idx_extra_costs_company ON extra_costs(company_id, spent_at DESC);
   `);
 
   await pool.query(`
     ALTER TABLE trip_proofs ADD COLUMN IF NOT EXISTS image bytea;
     ALTER TABLE fuel_entries ADD COLUMN IF NOT EXISTS image bytea;
+    ALTER TABLE fuel_entries ADD COLUMN IF NOT EXISTS timing text;
+  `);
+
+  await pool.query(`
+    UPDATE fuel_entries
+    SET timing = CASE WHEN trip_id IS NULL THEN 'no_trip' ELSE 'on_trip' END
+    WHERE timing IS NULL
+  `);
+
+  await pool.query(`ALTER TABLE fuel_entries ALTER COLUMN timing SET NOT NULL`);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fuel_entries_timing_check'
+      ) THEN
+        ALTER TABLE fuel_entries
+          ADD CONSTRAINT fuel_entries_timing_check
+          CHECK (timing IS NULL OR timing IN ('before_trip', 'on_trip', 'after_trip', 'no_trip'));
+      END IF;
+    END $$;
   `);
 
   await pool.query(`

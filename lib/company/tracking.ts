@@ -1,5 +1,5 @@
 import { getPool } from "@/lib/db";
-import { metersBetween } from "@/lib/company/geo";
+import { trackedKilometres } from "@/lib/company/geo";
 import { ensureFleetSchema } from "@/lib/company/fleet-schema";
 import { ensureOperationsSchema } from "@/lib/company/operations-schema";
 import {
@@ -107,21 +107,6 @@ function sleepHours(
     if (!log.ended_at) sleepingSince = log.started_at.toISOString();
   }
   return { hours, sleepingSince };
-}
-
-function kilometres(points: { latitude: number; longitude: number; at: number }[]) {
-  let meters = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    const gap = points[index].at - points[index - 1].at;
-    if (gap <= 0 || gap > 20 * 60 * 1000) continue;
-    const segment = metersBetween(
-      { lat: points[index - 1].latitude, lng: points[index - 1].longitude },
-      { lat: points[index].latitude, lng: points[index].longitude }
-    );
-    if (segment > 20000) continue;
-    meters += segment;
-  }
-  return Math.round((meters / 1000) * 10) / 10;
 }
 
 function payAmount(payType: string, rate: number | null, km: number, trips: number) {
@@ -390,7 +375,7 @@ export async function trackingSnapshot(companyId: string, onlyDriverId: string |
   }
   const finishedByDriver = new Map(finished.rows.map((row) => [row.driver_id, Number(row.trips)]));
   const rows = drivers.rows.map((driver) => {
-    const km = kilometres(byDriver.get(driver.id) ?? []);
+    const km = trackedKilometres(byDriver.get(driver.id) ?? []);
     const tripsFinished = finishedByDriver.get(driver.id) ?? 0;
     const rate = driver.pay_rate == null ? null : Number(driver.pay_rate);
     const rest = sleepHours(sleeps.rows, driver.id, now);

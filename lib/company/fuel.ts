@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { getPool } from "@/lib/db";
 import { ensureOperationsSchema } from "@/lib/company/operations-schema";
 import { assertJpeg, photoBytes } from "@/lib/company/files";
+import { resolveSpend, type SpendTiming } from "@/lib/company/spend";
 
 export type FuelFill = {
   id: string;
@@ -10,6 +11,8 @@ export type FuelFill = {
   driverId: string | null;
   driverName: string | null;
   tripId: string | null;
+  timing: SpendTiming;
+  customerName: string | null;
   filledAt: string;
   litres: number;
   amount: number;
@@ -33,6 +36,8 @@ export async function listFuel(companyId: string, onlyDriverId: string | null): 
     driver_id: string | null;
     driver_name: string | null;
     trip_id: string | null;
+    timing: SpendTiming | null;
+    customer_name: string | null;
     filled_at: Date;
     litres: string;
     amount: string;
@@ -42,11 +47,13 @@ export async function listFuel(companyId: string, onlyDriverId: string | null): 
     longitude: number | null;
   }>(
     `SELECT f.id, f.vehicle_id, v.registration_number, f.driver_id, d.full_name AS driver_name,
-            f.trip_id, f.filled_at, f.litres, f.amount, f.price_per_litre, f.details,
+            f.trip_id, f.timing, c.name AS customer_name, f.filled_at, f.litres, f.amount, f.price_per_litre, f.details,
             f.latitude, f.longitude
      FROM fuel_entries f
      LEFT JOIN vehicles v ON v.id = f.vehicle_id
      LEFT JOIN drivers d ON d.id = f.driver_id
+     LEFT JOIN trips t ON t.id = f.trip_id
+     LEFT JOIN customers c ON c.id = t.customer_id
      WHERE f.company_id = $1 AND f.deleted_at IS NULL
        AND ($2::uuid IS NULL OR f.driver_id = $2)
      ORDER BY f.filled_at DESC`,
@@ -59,6 +66,8 @@ export async function listFuel(companyId: string, onlyDriverId: string | null): 
     driverId: row.driver_id,
     driverName: row.driver_name,
     tripId: row.trip_id,
+    timing: row.timing ?? (row.trip_id ? "on_trip" : "no_trip"),
+    customerName: row.customer_name,
     filledAt: row.filled_at.toISOString(),
     litres: moneyNumber(row.litres),
     amount: moneyNumber(row.amount),
@@ -91,34 +100,20 @@ export async function addFuel(input: {
   if (details.length > 200) throw new Error("Fuel details must be under 200 characters");
   const price = Math.round((input.amount / input.litres) * 100) / 100;
   if (price <= 0 || price > 999999) throw new Error("Amount is not valid");
-  await ensureOperationsSchema();
-  const pool = getPool();
-  const vehicle = await pool.query(
-    `SELECT 1 FROM vehicles WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
-    [input.vehicleId, input.companyId]
-  );
-  if (!vehicle.rowCount) throw new Error("Choose a truck in this fleet");
-  if (input.tripId) {
-    const trip = await pool.query(
-      `SELECT 1 FROM trips
-       WHERE id = $1 AND company_id = $2 AND driver_id = $3 AND vehicle_id = $4 AND deleted_at IS NULL
-         AND status IN ('started', 'loading', 'in_transit', 'unloading')`,
-      [input.tripId, input.companyId, input.driverId, input.vehicleId]
-    );
-    if (!trip.rowCount) throw new Error("That trip was not found");
-  }
+  const spend = await resolveSpend(input.companyId, input.driverId, input.vehicleId, input.tripId);
   assertJpeg(input.bytes);
   const id = randomUUID();
-  await pool.query(
+  await getPool().query(
     `INSERT INTO fuel_entries
-       (id, company_id, vehicle_id, driver_id, trip_id, litres, amount, price_per_litre, details, image, latitude, longitude)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+       (id, company_id, vehicle_id, driver_id, trip_id, timing, litres, amount, price_per_litre, details, image, latitude, longitude)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
       id,
       input.companyId,
-      input.vehicleId,
+      spend.vehicleId,
       input.driverId,
-      input.tripId,
+      spend.tripId,
+      spend.timing,
       input.litres,
       input.amount,
       price,

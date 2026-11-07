@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireMember, saved } from "@/app/api/company/guard";
+import { listCosts } from "@/lib/company/costs";
 import { addFuel, listFuel } from "@/lib/company/fuel";
+import { vehicleAverages } from "@/lib/company/spend";
 
 export async function GET() {
   try {
@@ -12,12 +14,17 @@ export async function GET() {
     }
     const onlyDriver = owner.roleKey === "driver" ? owner.driverId : null;
     if (owner.roleKey === "driver" && !onlyDriver) {
-      return NextResponse.json({ fills: [], totalAmount: 0, totalLitres: 0 });
+      return NextResponse.json({ fills: [], totalAmount: 0, totalLitres: 0, costs: [], totalExtra: 0, vehicles: [] });
     }
-    const fills = await listFuel(company.id, onlyDriver);
+    const [fills, costs, vehicles] = await Promise.all([
+      listFuel(company.id, onlyDriver),
+      listCosts(company.id, onlyDriver),
+      vehicleAverages(company.id, onlyDriver),
+    ]);
     const totalAmount = Math.round(fills.reduce((sum, fill) => sum + fill.amount, 0) * 100) / 100;
     const totalLitres = Math.round(fills.reduce((sum, fill) => sum + fill.litres, 0) * 1000) / 1000;
-    return NextResponse.json({ fills, totalAmount, totalLitres });
+    const totalExtra = Math.round(costs.reduce((sum, cost) => sum + cost.amount, 0) * 100) / 100;
+    return NextResponse.json({ fills, totalAmount, totalLitres, costs, totalExtra, vehicles });
   } catch (error) {
     return saved(error, "trips.read");
   }
@@ -40,7 +47,7 @@ export async function POST(req: Request) {
     const latitude = Number(form.get("latitude"));
     const longitude = Number(form.get("longitude"));
     const photo = form.get("photo");
-    if (!vehicleId) return NextResponse.json({ error: "Choose a truck" }, { status: 400 });
+    if (!tripValue && !vehicleId) return NextResponse.json({ error: "Choose a truck" }, { status: 400 });
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return NextResponse.json({ error: "Location is required" }, { status: 400 });
     }

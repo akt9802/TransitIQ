@@ -281,11 +281,14 @@ export default function OwnerDashboard({
         <FuelSection
           mine={workspace.owner.roleKey === "driver"}
           vehicles={workspace.vehicles}
-          liveTrip={
-            workspace.trips.find((trip) =>
-              ["started", "loading", "in_transit", "unloading"].includes(trip.status)
-            ) ?? null
-          }
+          trips={workspace.trips.map((trip) => ({
+            id: trip.id,
+            status: trip.status,
+            customerName: trip.customerName,
+            vehicleId: trip.vehicleId,
+            vehicleRegistration: trip.vehicleRegistration,
+            completedAt: trip.completedAt,
+          }))}
         />
       ) : null}
 
