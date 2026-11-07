@@ -155,5 +155,11 @@ export async function ensureFleetSchema(): Promise<void> {
     END $$;
   `);
 
+  await pool.query(`
+    ALTER TABLE hos_logs DROP CONSTRAINT IF EXISTS hos_logs_kind_check;
+    ALTER TABLE hos_logs
+      ADD CONSTRAINT hos_logs_kind_check CHECK (kind IN ('driving', 'rest', 'sleep'));
+  `);
+
   fleetReady = true;
 }

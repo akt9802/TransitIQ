@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Modal } from "@/components/Modal";
 import type { OtpPurpose } from "@/lib/auth/otp";
 
@@ -12,6 +12,51 @@ const btnClass =
   "w-full rounded-md border-2 border-ink bg-accent py-3 text-xs font-extrabold uppercase tracking-wider text-accent-ink shadow-[var(--shadow-brutal-sm)] disabled:opacity-50";
 const labelClass = "block text-xs font-bold uppercase tracking-wider text-muted";
 const linkClass = "font-bold text-accent underline decoration-2 underline-offset-2";
+
+function PasswordField({
+  label,
+  value,
+  onChange,
+  autoComplete,
+  minLength,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: "current-password" | "new-password";
+  minLength?: number;
+}) {
+  const [visible, setVisible] = useState(false);
+  const id = useId();
+  return (
+    <div>
+      <label htmlFor={id} className={labelClass}>
+        {label}
+      </label>
+      <div className="relative mt-2">
+        <input
+          id={id}
+          type={visible ? "text" : "password"}
+          required
+          minLength={minLength}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete={autoComplete}
+          className="w-full rounded-md border-2 border-ink bg-paper py-2 pl-3 pr-16 text-sm"
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((open) => !open)}
+          aria-pressed={visible}
+          aria-label={visible ? "Hide password" : "Show password"}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold uppercase tracking-wider text-ink underline decoration-2 underline-offset-2"
+        >
+          {visible ? "Hide" : "Show"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function LoginForm() {
   const [step, setStep] = useState<Step>("email");
@@ -233,18 +278,13 @@ export default function LoginForm() {
 
       {step === "password" && (
         <form onSubmit={setPwd} className="mt-6 space-y-4">
-          <label className={labelClass}>
-            {purpose === "reset" ? "New password (min 8 characters)" : "Password (min 8 characters)"}
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={fieldClass}
-              autoComplete="new-password"
-            />
-          </label>
+          <PasswordField
+            label={purpose === "reset" ? "New password (min 8 characters)" : "Password (min 8 characters)"}
+            value={password}
+            onChange={setPassword}
+            autoComplete="new-password"
+            minLength={8}
+          />
           <button type="submit" disabled={loading} className={btnClass}>
             {loading ? "Saving…" : purpose === "reset" ? "Save new password & sign in" : "Save password & sign in"}
           </button>
@@ -263,17 +303,12 @@ export default function LoginForm() {
               className={fieldClass}
             />
           </label>
-          <label className={labelClass}>
-            Password
-            <input
-              type="password"
-              required
-              value={loginPassword}
-              onChange={(e) => setLoginPassword(e.target.value)}
-              className={fieldClass}
-              autoComplete="current-password"
-            />
-          </label>
+          <PasswordField
+            label="Password"
+            value={loginPassword}
+            onChange={setLoginPassword}
+            autoComplete="current-password"
+          />
           <button type="submit" disabled={loading} className={btnClass}>
             {loading ? "Signing in…" : "Sign in"}
           </button>

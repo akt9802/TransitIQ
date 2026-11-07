@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import DashboardNav, { type DashboardSection } from "@/components/dashboard/DashboardNav";
 import DriversSection from "@/components/dashboard/DriversSection";
 import PeopleSection from "@/components/dashboard/PeopleSection";
+import PerformanceSection from "@/components/dashboard/PerformanceSection";
+import TripTracker from "@/components/dashboard/TripTracker";
 import TripsSection from "@/components/dashboard/TripsSection";
 import { Alert } from "@/components/dashboard/frame";
 import { fieldClass, labelClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
@@ -64,7 +66,7 @@ function planLabel(plan: string): string {
   return "Free";
 }
 
-const SECTIONS: DashboardSection[] = ["company", "people", "vehicles", "drivers", "trips"];
+const SECTIONS: DashboardSection[] = ["company", "people", "vehicles", "drivers", "trips", "performance"];
 
 function requestedSection(value: string | undefined): DashboardSection | null {
   return SECTIONS.find((section) => section === value) ?? null;
@@ -103,6 +105,7 @@ export default function OwnerDashboard({
           workspace.trips.filter((trip) => trip.status === "assigned" || ["started", "loading", "in_transit", "unloading"].includes(trip.status)).length
         )
       : null,
+    canSeeTrips ? link("performance", workspace.owner.roleKey === "driver" ? "My day" : "Performance") : null,
   ].filter((item) => item !== null);
   const requested = requestedSection(section);
   const active =
@@ -248,6 +251,15 @@ export default function OwnerDashboard({
         />
       ) : null}
 
+      {hasCompany && workspace.owner.roleKey === "driver"
+        ? (() => {
+            const liveTrip = workspace.trips.find((trip) =>
+              ["started", "loading", "in_transit", "unloading"].includes(trip.status)
+            );
+            return liveTrip ? <TripTracker tripId={liveTrip.id} /> : null;
+          })()
+        : null}
+
       {hasCompany && active === "trips" && canSeeTrips ? (
         <TripsSection
           trips={workspace.trips}
@@ -257,6 +269,10 @@ export default function OwnerDashboard({
           canWrite={workspace.permissions.includes("trips.write")}
           ownDriverId={workspace.owner.roleKey === "driver" ? workspace.owner.driverId : null}
         />
+      ) : null}
+
+      {hasCompany && active === "performance" && canSeeTrips ? (
+        <PerformanceSection mine={workspace.owner.roleKey === "driver"} />
       ) : null}
 
       {!hasCompany || (editing && active === "company") ? (

@@ -89,6 +89,20 @@ export async function ensureOperationsSchema(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS trips_one_live_vehicle
       ON trips (vehicle_id)
       WHERE deleted_at IS NULL AND status IN ('started', 'loading', 'in_transit', 'unloading');
+
+    CREATE TABLE IF NOT EXISTS location_points (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      vehicle_id uuid REFERENCES vehicles(id),
+      trip_id uuid REFERENCES trips(id),
+      driver_id uuid REFERENCES drivers(id),
+      recorded_at timestamptz NOT NULL DEFAULT now(),
+      latitude double precision NOT NULL,
+      longitude double precision NOT NULL,
+      source text NOT NULL DEFAULT 'phone' CHECK (source IN ('gps', 'phone'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_location_points_trip ON location_points(trip_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_location_points_driver ON location_points(driver_id, recorded_at);
   `);
 
   await pool.query(`
