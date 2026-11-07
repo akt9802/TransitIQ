@@ -45,6 +45,8 @@ export type DriverTracking = {
   liveMovingHours: number;
   liveSpeedKmh: number | null;
   liveMoving: boolean;
+  averageSpeedKmh: number | null;
+  liveAverageSpeedKmh: number | null;
   onTrip: boolean;
   dutyKey: string;
 };
@@ -207,6 +209,7 @@ export async function recordLocation(
 export type DutyStatus = {
   stored: boolean;
   speedKmh: number | null;
+  averageSpeedKmh: number | null;
   moving: boolean;
   moveCount: number;
   drivingHours: number;
@@ -226,6 +229,7 @@ async function dutyStatus(
   return {
     stored,
     speedKmh: motion.liveSpeedKmh,
+    averageSpeedKmh: motion.liveAverageSpeedKmh,
     moving: motion.liveMoving,
     moveCount: motion.liveMoveCount,
     drivingHours: motion.drivingHours,
@@ -417,6 +421,8 @@ export async function trackingSnapshot(companyId: string, onlyDriverId: string |
       liveMovingHours: motion.liveMovingHours,
       liveSpeedKmh: motion.liveSpeedKmh,
       liveMoving: motion.liveMoving,
+      averageSpeedKmh: motion.averageSpeedKmh,
+      liveAverageSpeedKmh: motion.liveAverageSpeedKmh,
       onTrip: liveByDriver.has(driver.id),
       dutyKey: motion.dutyKey,
     };

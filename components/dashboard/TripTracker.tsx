@@ -14,6 +14,7 @@ type Duty = {
   moving: boolean;
   moveCount: number;
   speedKmh: number | null;
+  averageSpeedKmh: number | null;
 };
 
 function restAlertPermission() {
@@ -89,6 +90,7 @@ export default function TripTracker({ tripId }: { tripId: string }) {
         moving: row.liveMoving,
         moveCount: row.liveMoveCount,
         speedKmh: row.liveSpeedKmh,
+        averageSpeedKmh: row.liveAverageSpeedKmh,
       });
     }
 
@@ -133,14 +135,16 @@ export default function TripTracker({ tripId }: { tripId: string }) {
     };
   }, [apply, tripId]);
 
+  const average =
+    duty?.averageSpeedKmh == null ? "Average speed is not in yet." : `Average speed on this trip is ${duty.averageSpeedKmh} km/h.`;
   const moves =
     duty == null
       ? null
       : duty.moving
-        ? `Moving${duty.speedKmh != null ? ` at ${duty.speedKmh} km/h` : ""}. This trip has started moving ${duty.moveCount} ${duty.moveCount === 1 ? "time" : "times"}.`
+        ? `Moving${duty.speedKmh != null ? ` at ${duty.speedKmh} km/h` : ""}. ${average} This trip has started moving ${duty.moveCount} ${duty.moveCount === 1 ? "time" : "times"}.`
         : duty.moveCount === 0
           ? "Tracking is on. The truck counts as moving once it covers some ground on the way to the stop."
-          : `Stopped. This trip has started moving ${duty.moveCount} ${duty.moveCount === 1 ? "time" : "times"}.`;
+          : `Stopped. ${average} This trip has started moving ${duty.moveCount} ${duty.moveCount === 1 ? "time" : "times"}.`;
 
   return (
     <>

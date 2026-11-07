@@ -31,11 +31,14 @@ export type MotionSummary = {
   liveMovingHours: number;
   liveSpeedKmh: number | null;
   liveMoving: boolean;
+  averageSpeedKmh: number | null;
+  liveAverageSpeedKmh: number | null;
 };
 
 type Segment = {
   moving: boolean;
   creditMs: number;
+  meters: number;
   speedKmh: number | null;
   countMove: boolean;
 };
@@ -56,7 +59,7 @@ export function restMessage(hours: number): string {
 export function segmentMove(previous: MotionPoint, next: MotionPoint): Segment {
   const gapMs = next.at - previous.at;
   if (gapMs < MOVE_GAP_MIN_MS || previous.tripId !== next.tripId) {
-    return { moving: false, creditMs: 0, speedKmh: null, countMove: false };
+    return { moving: false, creditMs: 0, meters: 0, speedKmh: null, countMove: false };
   }
   const meters = metersBetween(
     { lat: previous.latitude, lng: previous.longitude },
@@ -64,16 +67,21 @@ export function segmentMove(previous: MotionPoint, next: MotionPoint): Segment {
   );
   const speedKmh = (meters / 1000) / (gapMs / 3600000);
   if (speedKmh > MAX_SPEED_KMH) {
-    return { moving: false, creditMs: 0, speedKmh: null, countMove: false };
+    return { moving: false, creditMs: 0, meters: 0, speedKmh: null, countMove: false };
   }
   const speed = Math.round(speedKmh * 10) / 10;
   if (meters < MOVE_METERS) {
-    return { moving: false, creditMs: 0, speedKmh: gapMs <= MOVE_GAP_MAX_MS ? speed : null, countMove: false };
+    return { moving: false, creditMs: 0, meters, speedKmh: gapMs <= MOVE_GAP_MAX_MS ? speed : null, countMove: false };
   }
   if (gapMs > MOVE_GAP_MAX_MS) {
-    return { moving: false, creditMs: 0, speedKmh: null, countMove: true };
+    return { moving: false, creditMs: 0, meters: 0, speedKmh: null, countMove: true };
   }
-  return { moving: true, creditMs: gapMs, speedKmh: speed, countMove: true };
+  return { moving: true, creditMs: gapMs, meters, speedKmh: speed, countMove: true };
+}
+
+function averageSpeed(meters: number, ms: number): number | null {
+  if (meters <= 0 || ms <= 0) return null;
+  return Math.round(((meters / 1000) / (ms / 3600000)) * 10) / 10;
 }
 
 function hours(ms: number) {
@@ -109,10 +117,12 @@ export function summarizeMotion(
 ): MotionSummary {
   const duty = dutyWindow(sleeps, now);
   let movingMs = 0;
+  let movingMeters = 0;
   let drivingMs = 0;
   let moveCount = 0;
   let liveMoveCount = 0;
   let liveMovingMs = 0;
+  let liveMovingMeters = 0;
   let wasMoving = false;
   let stoppedSamples = 0;
   const movesOnTrip = new Map<string, number>();
@@ -142,8 +152,12 @@ export function summarizeMotion(
       stoppedSamples = 0;
       if (segment.moving) {
         movingMs += segment.creditMs;
+        movingMeters += segment.meters;
         drivingMs += driveCredit(previous.at, next.at, duty.lastWake, duty.sleepFrom);
-        if (onLive) liveMovingMs += segment.creditMs;
+        if (onLive) {
+          liveMovingMs += segment.creditMs;
+          liveMovingMeters += segment.meters;
+        }
       }
     } else {
       stoppedSamples += 1;
@@ -168,5 +182,7 @@ export function summarizeMotion(
     liveMovingHours: hours(liveMovingMs),
     liveSpeedKmh,
     liveMoving,
+    averageSpeedKmh: averageSpeed(movingMeters, movingMs),
+    liveAverageSpeedKmh: averageSpeed(liveMovingMeters, liveMovingMs),
   };
 }

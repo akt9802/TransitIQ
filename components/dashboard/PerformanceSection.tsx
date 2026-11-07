@@ -21,6 +21,11 @@ function payLabel(payType: string) {
   return "Per trip";
 }
 
+function speed(value: number | null) {
+  if (value == null) return "not in yet";
+  return `${value.toLocaleString("en-IN", { maximumFractionDigits: 1 })} km/h`;
+}
+
 function when(iso: string) {
   return new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 }
@@ -75,7 +80,7 @@ export default function PerformanceSection({ mine }: { mine: boolean }) {
       title={mine ? "My day" : "Performance"}
       caption={
         snapshot
-          ? `A point is stored about every ${snapshot.gapMinutes} minutes and kept for ${snapshot.keptDays} days. The truck counts as moving after ${snapshot.moveMeters} metres. After ${snapshot.driveLimitHours} hours of driving since the last wake-up, ${mine ? "stop and rest" : "the driver is asked to stop and rest"}. Parked time does not count. Per km and per trip pay use those ${snapshot.keptDays} days. Salary is the monthly rate.`
+          ? `A point is stored about every ${snapshot.gapMinutes} minutes and kept for ${snapshot.keptDays} days. The truck counts as moving after ${snapshot.moveMeters} metres. Average speed is the distance between checks divided by the time between them, while the truck is moving. After ${snapshot.driveLimitHours} hours of driving since the last wake-up, ${mine ? "stop and rest" : "the driver is asked to stop and rest"}. Parked time does not count. Per km and per trip pay use those ${snapshot.keptDays} days. Salary is the monthly rate.`
           : "Loading the last 10 days."
       }
     >
@@ -122,15 +127,16 @@ export default function PerformanceSection({ mine }: { mine: boolean }) {
             {row.onTrip ? (
               <>
                 <p className="mt-1 text-2xl font-extrabold text-ink">
-                  {row.liveMoveCount} {row.liveMoveCount === 1 ? "move" : "moves"}
+                  {row.liveAverageSpeedKmh == null ? "—" : `${row.liveAverageSpeedKmh.toLocaleString("en-IN", { maximumFractionDigits: 1 })} km/h`}
                 </p>
                 <p className="mt-1 text-sm text-ink">
-                  Moving for {clock(row.liveMovingHours)}.
+                  Average speed on this trip, from the distance and time between each check.
                   {row.liveMoving
                     ? ` On the move${row.liveSpeedKmh != null ? ` at ${row.liveSpeedKmh} km/h` : ""}.`
                     : row.liveMoveCount === 0
                       ? " Waiting until the truck covers some ground."
-                      : " Stopped right now."}
+                      : " Stopped right now."}{" "}
+                  Moving for {clock(row.liveMovingHours)}. {row.liveMoveCount} {row.liveMoveCount === 1 ? "move" : "moves"}.
                 </p>
               </>
             ) : (
@@ -141,7 +147,7 @@ export default function PerformanceSection({ mine }: { mine: boolean }) {
             <p className="text-xs font-bold uppercase tracking-wider text-muted">Last {snapshot?.keptDays} days</p>
             <p className="mt-1 text-2xl font-extrabold text-ink">{row.kilometres.toLocaleString("en-IN")} km</p>
             <p className="mt-1 text-sm text-ink">
-              {row.tripsFinished} finished {row.tripsFinished === 1 ? "trip" : "trips"} · truck started moving {row.moveCount}{" "}
+              {row.tripsFinished} finished {row.tripsFinished === 1 ? "trip" : "trips"} · average {speed(row.averageSpeedKmh)} · truck started moving {row.moveCount}{" "}
               {row.moveCount === 1 ? "time" : "times"} · {payLabel(row.payType)}
             </p>
             <p className="mt-2 text-sm font-extrabold text-ink">
@@ -153,11 +159,12 @@ export default function PerformanceSection({ mine }: { mine: boolean }) {
       ) : null}
       {!mine && snapshot ? (
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
+          <table className="w-full min-w-[58rem] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b-2 border-ink text-xs font-bold uppercase tracking-wider text-muted">
                 <th className="py-2 pr-3">Driver</th>
                 <th className="py-2 pr-3">Km</th>
+                <th className="py-2 pr-3">Avg speed</th>
                 <th className="py-2 pr-3">Moves</th>
                 <th className="py-2 pr-3">Since rest</th>
                 <th className="py-2 pr-3">Trips</th>
@@ -171,6 +178,7 @@ export default function PerformanceSection({ mine }: { mine: boolean }) {
                 <tr key={item.driverId} className="border-b border-ink/15">
                   <td className="py-3 pr-3 font-extrabold text-ink">{item.driverName}</td>
                   <td className="py-3 pr-3">{item.kilometres.toLocaleString("en-IN")}</td>
+                  <td className="py-3 pr-3">{item.averageSpeedKmh == null ? "—" : `${item.averageSpeedKmh} km/h`}</td>
                   <td className="py-3 pr-3">{item.moveCount}</td>
                   <td className="py-3 pr-3">
                     {clock(item.drivingHours)}
