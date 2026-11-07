@@ -10,9 +10,10 @@ const SHELL = "mx-auto w-full max-w-7xl px-3 sm:px-4 md:px-5 lg:px-6";
 const BTN =
   "rounded-md border-2 border-ink bg-paper px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-ink shadow-[var(--shadow-brutal-sm)] transition hover:-translate-y-0.5 hover:bg-paper-muted";
 
-type Props = { email: string | null };
+type Props = { email: string | null; name?: string | null };
 
-export default function SiteHeader({ email }: Props) {
+export default function SiteHeader({ email, name }: Props) {
+  const label = name?.trim() || email;
   const pathname = usePathname();
   const isHome = pathname === "/";
   const isLogin = pathname === "/login";
@@ -38,7 +39,7 @@ export default function SiteHeader({ email }: Props) {
                   Dashboard
                 </a>
               ) : (
-                <span className="hidden text-sm text-muted sm:inline">{email}</span>
+                <span className="hidden max-w-[14rem] truncate text-sm text-ink sm:inline">{label}</span>
               )}
               <LogoutButton />
             </>

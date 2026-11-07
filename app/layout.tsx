@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Chivo_Mono } from "next/font/google";
 import SiteHeader from "@/components/layout/SiteHeader";
-import { getSession } from "@/lib/auth/session";
+import { ensureAuthSchema } from "@/lib/auth/schema";
+import { getSession, getUserName } from "@/lib/auth/session";
 import "./globals.css";
 
 const chivoMono = Chivo_Mono({
@@ -19,6 +20,15 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const session = await getSession();
+  let name: string | null = null;
+  if (session) {
+    try {
+      await ensureAuthSchema();
+      name = await getUserName(session.sub);
+    } catch (error) {
+      console.error("header name", error);
+    }
+  }
 
   return (
     <html lang="en" className={`${chivoMono.variable} h-full`}>
@@ -30,7 +40,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        <SiteHeader email={session?.email ?? null} />
+        <SiteHeader email={session?.email ?? null} name={name} />
         {children}
       </body>
     </html>
