@@ -1,0 +1,159 @@
+import { getPool } from "@/lib/db";
+
+let fleetReady = false;
+
+/** Trucks, drivers, vendors, papers, and trackers. Safe to call more than once. */
+export async function ensureFleetSchema(): Promise<void> {
+  if (fleetReady) return;
+  const pool = getPool();
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vendors (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      name text NOT NULL,
+      phone text,
+      gstin text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      deleted_at timestamptz
+    );
+
+    CREATE TABLE IF NOT EXISTS drivers (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      branch_id uuid REFERENCES branches(id),
+      full_name text NOT NULL,
+      phone text NOT NULL,
+      address text,
+      photo_key text,
+      emergency_name text,
+      emergency_phone text,
+      license_number text,
+      license_class text,
+      license_expires_on date,
+      license_endorsements text,
+      pay_type text NOT NULL DEFAULT 'per_trip' CHECK (pay_type IN ('per_trip', 'per_km', 'salary')),
+      pay_rate numeric(12,2),
+      performance_score numeric(5,2),
+      status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'on_leave', 'inactive')),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      deleted_at timestamptz
+    );
+
+    CREATE TABLE IF NOT EXISTS vehicle_documents (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      vehicle_id uuid NOT NULL REFERENCES vehicles(id),
+      kind text NOT NULL CHECK (kind IN ('rc', 'insurance', 'permit', 'fitness', 'pollution', 'road_tax')),
+      document_number text,
+      file_key text,
+      issued_on date,
+      expires_on date,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      deleted_at timestamptz
+    );
+
+    CREATE TABLE IF NOT EXISTS driver_documents (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      driver_id uuid NOT NULL REFERENCES drivers(id),
+      kind text NOT NULL CHECK (kind IN ('license', 'other')),
+      document_number text,
+      file_key text,
+      expires_on date,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      deleted_at timestamptz
+    );
+
+    CREATE TABLE IF NOT EXISTS devices (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      vehicle_id uuid REFERENCES vehicles(id),
+      driver_id uuid REFERENCES drivers(id),
+      kind text NOT NULL CHECK (kind IN ('gps', 'phone')),
+      external_id text NOT NULL,
+      last_seen_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      deleted_at timestamptz
+    );
+
+    CREATE TABLE IF NOT EXISTS driver_shifts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      driver_id uuid NOT NULL REFERENCES drivers(id),
+      vehicle_id uuid REFERENCES vehicles(id),
+      starts_at timestamptz NOT NULL,
+      ends_at timestamptz NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS driver_attendance (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      driver_id uuid NOT NULL REFERENCES drivers(id),
+      day date NOT NULL,
+      kind text NOT NULL CHECK (kind IN ('present', 'absent', 'leave')),
+      note text,
+      UNIQUE (driver_id, day)
+    );
+
+    CREATE TABLE IF NOT EXISTS hos_logs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      driver_id uuid NOT NULL REFERENCES drivers(id),
+      trip_id uuid,
+      kind text NOT NULL CHECK (kind IN ('driving', 'rest')),
+      started_at timestamptz NOT NULL,
+      ended_at timestamptz
+    );
+
+    CREATE TABLE IF NOT EXISTS driver_point_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      driver_id uuid NOT NULL REFERENCES drivers(id),
+      points integer NOT NULL,
+      reason text NOT NULL,
+      source_type text CHECK (source_type IS NULL OR source_type IN ('incident_report', 'trip')),
+      source_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_vendors_company ON vendors(company_id);
+    CREATE INDEX IF NOT EXISTS idx_drivers_company ON drivers(company_id);
+    CREATE INDEX IF NOT EXISTS idx_vehicle_documents_vehicle ON vehicle_documents(vehicle_id);
+    CREATE INDEX IF NOT EXISTS idx_driver_documents_driver ON driver_documents(driver_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS devices_external_id
+      ON devices (external_id) WHERE deleted_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_devices_company ON devices(company_id);
+    CREATE INDEX IF NOT EXISTS idx_driver_shifts_driver ON driver_shifts(driver_id);
+    CREATE INDEX IF NOT EXISTS idx_driver_attendance_driver ON driver_attendance(driver_id);
+  `);
+
+  await pool.query(`
+    ALTER TABLE fleet_users
+      ADD COLUMN IF NOT EXISTS driver_id uuid REFERENCES drivers(id)
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS fleet_users_driver
+      ON fleet_users (driver_id)
+      WHERE driver_id IS NOT NULL AND deleted_at IS NULL
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'vehicles_vendor_id_fkey'
+      ) THEN
+        ALTER TABLE vehicles
+          ADD CONSTRAINT vehicles_vendor_id_fkey
+          FOREIGN KEY (vendor_id) REFERENCES vendors(id);
+      END IF;
+    END $$;
+  `);
+
+  fleetReady = true;
+}

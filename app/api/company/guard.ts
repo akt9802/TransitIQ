@@ -5,7 +5,9 @@ import { getWorkspace } from "@/lib/company/queries";
 import type { Workspace } from "@/lib/company/types";
 import { formatPgError } from "@/lib/db";
 
-export async function requireFleet(permission: string) {
+type FleetAccess = { workspace: Workspace & { company: NonNullable<Workspace["company"]> } };
+
+async function loadFleet(): Promise<FleetAccess | { error: NextResponse }> {
   const session = await getSession();
   if (!session) {
     return { error: NextResponse.json({ error: "Sign in required" }, { status: 401 }) };
@@ -18,15 +20,45 @@ export async function requireFleet(permission: string) {
   if (!workspace.company) {
     return { error: NextResponse.json({ error: "Set up your fleet first" }, { status: 400 }) };
   }
-  if (!workspace.permissions.includes(permission)) {
+  return { workspace: workspace as FleetAccess["workspace"] };
+}
+
+export async function requireMember() {
+  return loadFleet();
+}
+
+export async function requireFleet(permission: string) {
+  const access = await loadFleet();
+  if ("error" in access) return access;
+  if (!access.workspace.permissions.includes(permission)) {
     return { error: NextResponse.json({ error: "You can't change this" }, { status: 403 }) };
   }
-  return { workspace: workspace as Workspace & { company: NonNullable<Workspace["company"]> } };
+  return access;
+}
+
+export async function handleWrite(
+  permission: string | null,
+  work: (ctx: { companyId: string; userId: string }, body: unknown) => Promise<unknown>,
+  req?: Request,
+  status = 200
+) {
+  try {
+    const access = permission ? await requireFleet(permission) : await requireMember();
+    if ("error" in access) return access.error;
+    const body = req ? await req.json().catch(() => ({})) : {};
+    const result = await work(
+      { companyId: access.workspace.company.id, userId: access.workspace.owner.id },
+      body
+    );
+    return NextResponse.json(result ?? { ok: true }, { status });
+  } catch (error) {
+    return saved(error, permission ?? "fleet");
+  }
 }
 
 export function saved(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
-  const isInput = /required|must be|should|not valid|Missing|already|Choose/.test(message);
+  const isInput = /required|must be|should|not valid|Missing|already|Choose|not found|in use|linked/i.test(message);
   if (!isInput) console.error(fallback, error);
   return NextResponse.json(
     { error: isInput ? message : formatPgError(error) },

@@ -13,7 +13,8 @@ function isUnique(error: unknown): boolean {
 const COLUMNS = `
   registration_number, make, model, year, chassis_number, engine_number,
   truck_type, load_capacity_kg, axle_count, length_m, width_m, height_m,
-  ownership, contract_start, contract_end, status, odometer_km, tank_capacity_l
+  ownership, contract_start, contract_end, status, odometer_km, tank_capacity_l,
+  branch_id, vendor_id
 `;
 
 function values(input: VehicleInput): unknown[] {
@@ -36,7 +37,27 @@ function values(input: VehicleInput): unknown[] {
     input.status,
     input.odometerKm,
     input.tankCapacityL,
+    input.branchId,
+    input.vendorId,
   ];
+}
+
+async function assertPlacement(companyId: string, input: VehicleInput) {
+  const pool = getPool();
+  if (input.branchId) {
+    const branch = await pool.query(
+      `SELECT 1 FROM branches WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
+      [input.branchId, companyId]
+    );
+    if (!branch.rowCount) throw new Error("Choose a branch in this fleet");
+  }
+  if (input.vendorId) {
+    const vendor = await pool.query(
+      `SELECT 1 FROM vendors WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
+      [input.vendorId, companyId]
+    );
+    if (!vendor.rowCount) throw new Error("Choose a vendor in this fleet");
+  }
 }
 
 export async function addVehicle(
@@ -64,10 +85,11 @@ export async function addVehicle(
       await client.query("ROLLBACK");
       return "limit";
     }
+    await assertPlacement(companyId, input);
     await client.query(
       `INSERT INTO vehicles (company_id, ${COLUMNS})
        VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
        )`,
       [companyId, ...values(input)]
     );
@@ -89,6 +111,7 @@ export async function updateVehicle(
 ): Promise<boolean> {
   const pool = getPool();
   try {
+    await assertPlacement(companyId, input);
     const updated = await pool.query(
       `UPDATE vehicles SET
          registration_number = $3,
@@ -109,6 +132,8 @@ export async function updateVehicle(
          status = $18,
          odometer_km = $19,
          tank_capacity_l = $20,
+         branch_id = $21,
+         vendor_id = $22,
          updated_at = now()
        WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
       [vehicleId, companyId, ...values(input)]

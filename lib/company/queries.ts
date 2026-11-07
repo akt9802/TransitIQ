@@ -1,4 +1,11 @@
 import { getPool } from "@/lib/db";
+import {
+  getSubscription,
+  listBranches,
+  listDriverPapers,
+  listDrivers,
+  listVehiclePapers,
+} from "@/lib/company/records";
 import type {
   CompanyInput,
   CompanyRecord,
@@ -6,6 +13,22 @@ import type {
   VehicleRecord,
   Workspace,
 } from "@/lib/company/types";
+
+type FleetLists = Pick<
+  Workspace,
+  | "branches"
+  | "vendors"
+  | "drivers"
+  | "vehiclePapers"
+  | "driverPapers"
+  | "devices"
+  | "shifts"
+  | "attendance"
+  | "hosLogs"
+  | "pointEvents"
+  | "subscription"
+  | "apiKeys"
+>;
 
 type OwnerRow = {
   id: string;
@@ -61,6 +84,21 @@ export async function getWorkspace(userId: string): Promise<Workspace | null> {
   let company: CompanyRecord | null = null;
   let people: PersonRecord[] = [];
   let vehicles: VehicleRecord[] = [];
+  const emptyFleet: FleetLists = {
+    branches: [],
+    vendors: [],
+    drivers: [],
+    vehiclePapers: [],
+    driverPapers: [],
+    devices: [],
+    shifts: [],
+    attendance: [],
+    hosLogs: [],
+    pointEvents: [],
+    subscription: null,
+    apiKeys: [],
+  };
+  let fleet = emptyFleet;
   if (owner.company_id) {
     const companyResult = await pool.query<CompanyRow>(
       `SELECT id, name, legal_name, gstin, phone, email, address, plan, vehicle_limit
@@ -78,11 +116,14 @@ export async function getWorkspace(userId: string): Promise<Workspace | null> {
       role_key: string | null;
       role_name: string | null;
       has_login: boolean;
+      branch_id: string | null;
+      branch_name: string | null;
     }>(
       `SELECT u.id, u.full_name, u.email, u.phone, r.key AS role_key, r.name AS role_name,
-              (u.password_hash IS NOT NULL) AS has_login
+              (u.password_hash IS NOT NULL) AS has_login, u.branch_id, b.name AS branch_name
        FROM fleet_users u
        LEFT JOIN roles r ON r.id = u.role_id
+       LEFT JOIN branches b ON b.id = u.branch_id AND b.deleted_at IS NULL
        WHERE u.company_id = $1 AND u.deleted_at IS NULL
        ORDER BY u.created_at ASC`,
       [owner.company_id]
@@ -95,8 +136,25 @@ export async function getWorkspace(userId: string): Promise<Workspace | null> {
       roleKey: row.role_key,
       roleName: row.role_name,
       hasLogin: row.has_login,
+      branchId: row.branch_id,
+      branchName: row.branch_name,
     }));
     vehicles = await listVehicles(owner.company_id);
+    const companyId = owner.company_id;
+    fleet = {
+      branches: await listBranches(companyId),
+      vendors: [],
+      drivers: await listDrivers(companyId),
+      vehiclePapers: await listVehiclePapers(companyId),
+      driverPapers: await listDriverPapers(companyId),
+      devices: [],
+      shifts: [],
+      attendance: [],
+      hosLogs: [],
+      pointEvents: [],
+      subscription: await getSubscription(companyId),
+      apiKeys: [],
+    };
   }
 
   const permissionResult = await pool.query<{ key: string }>(
@@ -123,6 +181,8 @@ export async function getWorkspace(userId: string): Promise<Workspace | null> {
     company,
     people,
     vehicles,
+    ...fleet,
+    notifications: [],
     permissions: permissionResult.rows.map((row) => row.key),
   };
 }
@@ -147,6 +207,10 @@ type VehicleRow = {
   status: string;
   odometer_km: string | number | null;
   tank_capacity_l: string | number | null;
+  branch_id: string | null;
+  branch_name: string | null;
+  vendor_id: string | null;
+  vendor_name: string | null;
 };
 
 function asNumber(value: string | number | null): number | null {
@@ -186,18 +250,25 @@ export function toVehicle(row: VehicleRow): VehicleRecord {
     status: row.status,
     odometerKm: asNumber(row.odometer_km),
     tankCapacityL: asNumber(row.tank_capacity_l),
+    branchId: row.branch_id,
+    branchName: row.branch_name,
+    vendorId: row.vendor_id,
+    vendorName: row.vendor_name,
   };
 }
 
 export async function listVehicles(companyId: string): Promise<VehicleRecord[]> {
   const pool = getPool();
   const { rows } = await pool.query<VehicleRow>(
-    `SELECT id, registration_number, make, model, year, chassis_number, engine_number,
-            truck_type, load_capacity_kg, axle_count, length_m, width_m, height_m,
-            ownership, contract_start, contract_end, status, odometer_km, tank_capacity_l
-     FROM vehicles
-     WHERE company_id = $1 AND deleted_at IS NULL
-     ORDER BY registration_number ASC`,
+    `SELECT v.id, v.registration_number, v.make, v.model, v.year, v.chassis_number, v.engine_number,
+            v.truck_type, v.load_capacity_kg, v.axle_count, v.length_m, v.width_m, v.height_m,
+            v.ownership, v.contract_start, v.contract_end, v.status, v.odometer_km, v.tank_capacity_l,
+            v.branch_id, b.name AS branch_name, v.vendor_id, vn.name AS vendor_name
+     FROM vehicles v
+     LEFT JOIN branches b ON b.id = v.branch_id AND b.deleted_at IS NULL
+     LEFT JOIN vendors vn ON vn.id = v.vendor_id AND vn.deleted_at IS NULL
+     WHERE v.company_id = $1 AND v.deleted_at IS NULL
+     ORDER BY v.registration_number ASC`,
     [companyId]
   );
   return rows.map(toVehicle);
@@ -250,6 +321,12 @@ export async function createFleet(
       await client.query("ROLLBACK");
       return "exists";
     }
+
+    await client.query(
+      `INSERT INTO subscriptions (company_id, plan, status, vehicle_limit)
+       VALUES ($1, 'free', 'active', 3)`,
+      [companyId]
+    );
 
     await client.query("COMMIT");
     return "created";

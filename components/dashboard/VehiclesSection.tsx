@@ -2,10 +2,14 @@
 
 import { cloneElement, useEffect, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
+import PapersPanel from "@/components/dashboard/PapersPanel";
 import {
   TRUCK_TYPES,
+  VEHICLE_DOC_KINDS,
   VEHICLE_OWNERSHIP,
   VEHICLE_STATUSES,
+  type BranchRecord,
+  type PaperRecord,
   type VehicleRecord,
 } from "@/lib/company/types";
 import { fieldClass, invalidFieldClass, labelClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
@@ -14,6 +18,8 @@ type Props = {
   vehicles: VehicleRecord[];
   vehicleLimit: number;
   canWrite: boolean;
+  branches: BranchRecord[];
+  papers: PaperRecord[];
 };
 
 type Draft = {
@@ -36,6 +42,8 @@ type Draft = {
   tankCapacityL: string;
   contractStart: string;
   contractEnd: string;
+  branchId: string;
+  vendorId: string;
 };
 
 function blank(): Draft {
@@ -59,6 +67,8 @@ function blank(): Draft {
     tankCapacityL: "",
     contractStart: "",
     contractEnd: "",
+    branchId: "",
+    vendorId: "",
   };
 }
 
@@ -84,6 +94,8 @@ function fromVehicle(vehicle: VehicleRecord): Draft {
     tankCapacityL: text(vehicle.tankCapacityL),
     contractStart: vehicle.contractStart ?? "",
     contractEnd: vehicle.contractEnd ?? "",
+    branchId: vehicle.branchId ?? "",
+    vendorId: vehicle.vendorId ?? "",
   };
 }
 
@@ -96,6 +108,10 @@ const ERROR_FIELDS: [string, keyof Draft][] = [
   ["This registration", "registrationNumber"],
   ["Truck type", "truckType"],
   ["Ownership", "ownership"],
+  ["Branch", "branchId"],
+  ["Vendor", "vendorId"],
+  ["Choose a vendor", "vendorId"],
+  ["Choose a branch", "branchId"],
   ["Status", "status"],
   ["Make", "make"],
   ["Model", "model"],
@@ -117,7 +133,7 @@ function fieldForError(message: string): keyof Draft | null {
   return ERROR_FIELDS.find(([prefix]) => message.startsWith(prefix))?.[1] ?? null;
 }
 
-export default function VehiclesSection({ vehicles, vehicleLimit, canWrite }: Props) {
+export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, branches, papers }: Props) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -204,6 +220,14 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite }: Pr
                 <option key={item.key} value={item.key}>
                   {item.label}
                 </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Branch" field="branchId" errorField={errorField}>
+            <select value={draft.branchId} onChange={(e) => set("branchId", e.target.value)} className={fieldClass}>
+              <option value="">No branch</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>{branch.name}</option>
               ))}
             </select>
           </Field>
@@ -307,6 +331,16 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite }: Pr
             </p>
           ) : null}
         </form>
+      ) : null}
+      {draft?.id ? (
+        <PapersPanel
+          parentId={draft.id}
+          rows={papers}
+          kinds={VEHICLE_DOC_KINDS}
+          endpoint="/api/company/vehicle-documents"
+          canWrite={canWrite}
+          showIssued
+        />
       ) : null}
 
       {vehicles.length === 0 ? (

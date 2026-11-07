@@ -18,14 +18,24 @@ async function roleId(key: string): Promise<string> {
   return id;
 }
 
+async function assertBranch(companyId: string, branchId: string | null) {
+  if (!branchId) return;
+  const { rowCount } = await getPool().query(
+    `SELECT 1 FROM branches WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
+    [branchId, companyId]
+  );
+  if (!rowCount) throw new Error("Choose a branch in this fleet");
+}
+
 export async function addPerson(companyId: string, input: PersonInput): Promise<void> {
   const pool = getPool();
   const assignedRole = await roleId(input.roleKey);
+  await assertBranch(companyId, input.branchId);
   try {
     await pool.query(
-      `INSERT INTO fleet_users (email, full_name, phone, company_id, role_id)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [input.email, input.fullName, input.phone, companyId, assignedRole]
+      `INSERT INTO fleet_users (email, full_name, phone, company_id, role_id, branch_id)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [input.email, input.fullName, input.phone, companyId, assignedRole, input.branchId]
     );
   } catch (error) {
     if (uniqueEmail(error)) {
@@ -53,6 +63,7 @@ export async function updatePerson(
   if (row.role_key === "owner") return "owner";
 
   const assignedRole = await roleId(input.roleKey);
+  await assertBranch(companyId, input.branchId);
   try {
     await pool.query(
       `UPDATE fleet_users
@@ -60,9 +71,17 @@ export async function updatePerson(
            phone = $4,
            email = CASE WHEN password_hash IS NULL THEN $5 ELSE email END,
            role_id = $6,
+           branch_id = $7,
            updated_at = now()
        WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`,
-      [personId, companyId, input.fullName, input.phone, input.email, assignedRole]
+      [personId, companyId, input.fullName, input.phone, input.email, assignedRole, input.branchId]
+    );
+    await pool.query(
+      `UPDATE drivers d
+       SET full_name = $3, phone = COALESCE($4, d.phone), branch_id = $5, updated_at = now()
+       FROM fleet_users u
+       WHERE u.id = $1 AND u.company_id = $2 AND u.driver_id = d.id AND d.deleted_at IS NULL`,
+      [personId, companyId, input.fullName, input.phone, input.branchId]
     );
   } catch (error) {
     if (uniqueEmail(error)) {

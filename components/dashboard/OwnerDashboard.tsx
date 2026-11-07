@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import BranchesSection from "@/components/dashboard/BranchesSection";
 import DashboardNav, { type DashboardSection } from "@/components/dashboard/DashboardNav";
+import DriversSection from "@/components/dashboard/DriversSection";
 import PeopleSection from "@/components/dashboard/PeopleSection";
 import { fieldClass, labelClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
 import VehiclesSection from "@/components/dashboard/VehiclesSection";
@@ -61,9 +63,10 @@ function planLabel(plan: string): string {
   return "Free";
 }
 
+const SECTIONS: DashboardSection[] = ["company", "people", "branches", "vehicles", "drivers"];
+
 function requestedSection(value: string | undefined): DashboardSection | null {
-  if (value === "people" || value === "vehicles" || value === "company") return value;
-  return null;
+  return SECTIONS.find((section) => section === value) ?? null;
 }
 
 export default function OwnerDashboard({
@@ -79,24 +82,20 @@ export default function OwnerDashboard({
   const canSeeCompany = workspace.permissions.includes("company.read") || canEditCompany;
   const canSeePeople = workspace.permissions.includes("people.read");
   const canSeeVehicles = workspace.permissions.includes("vehicles.read");
+  const canSeeBranches = workspace.permissions.includes("branches.read");
+  const canSeeDrivers = workspace.permissions.includes("drivers.read");
+  const link = (section: DashboardSection, label: string, count?: number) => ({
+    section,
+    label,
+    href: section === "company" ? "/dashboard" : `/dashboard?section=${section}`,
+    count,
+  });
   const navItems = [
-    canSeeCompany ? { section: "company" as const, label: "Company", href: "/dashboard" } : null,
-    canSeePeople
-      ? {
-          section: "people" as const,
-          label: "People",
-          href: "/dashboard?section=people",
-          count: workspace.people.length,
-        }
-      : null,
-    canSeeVehicles
-      ? {
-          section: "vehicles" as const,
-          label: "Vehicles",
-          href: "/dashboard?section=vehicles",
-          count: workspace.vehicles.length,
-        }
-      : null,
+    canSeeCompany ? link("company", "Company") : null,
+    canSeePeople ? link("people", "People", workspace.people.length) : null,
+    canSeeBranches ? link("branches", "Branches", workspace.branches.length) : null,
+    canSeeVehicles ? link("vehicles", "Vehicles", workspace.vehicles.length) : null,
+    canSeeDrivers ? link("drivers", "Drivers", workspace.drivers.length) : null,
   ].filter((item) => item !== null);
   const requested = requestedSection(section);
   const active =
@@ -182,7 +181,7 @@ export default function OwnerDashboard({
 
       {hasCompany && !editing && workspace.company && navItems.length === 0 ? (
         <p className="mt-8 text-sm text-ink-soft">
-          You are signed in to {workspace.company.name}. The owner manages the company, people, and vehicles.
+          You are signed in to {workspace.company.name}. The owner manages this fleet.
         </p>
       ) : null}
 
@@ -200,7 +199,7 @@ export default function OwnerDashboard({
                 <Fact label="Address" value={shown(workspace.company.address)} />
                 <Fact
                   label="Plan"
-                  value={`${planLabel(workspace.company.plan)} · up to ${workspace.company.vehicleLimit} trucks`}
+                  value={`${planLabel(workspace.subscription?.plan ?? workspace.company.plan)} · ${workspace.subscription?.status ?? "active"} · up to ${workspace.company.vehicleLimit} trucks`}
                 />
               </dl>
             </section>
@@ -222,8 +221,13 @@ export default function OwnerDashboard({
       {hasCompany && active === "people" && canSeePeople ? (
         <PeopleSection
           people={workspace.people}
+          branches={workspace.branches}
           canWrite={workspace.permissions.includes("people.write")}
         />
+      ) : null}
+
+      {hasCompany && active === "branches" && canSeeBranches ? (
+        <BranchesSection branches={workspace.branches} canWrite={workspace.permissions.includes("branches.write")} />
       ) : null}
 
       {hasCompany && active === "vehicles" && canSeeVehicles && workspace.company ? (
@@ -231,6 +235,18 @@ export default function OwnerDashboard({
           vehicles={workspace.vehicles}
           vehicleLimit={workspace.company.vehicleLimit}
           canWrite={workspace.permissions.includes("vehicles.write")}
+          branches={workspace.branches}
+          papers={workspace.vehiclePapers}
+        />
+      ) : null}
+
+      {hasCompany && active === "drivers" && canSeeDrivers ? (
+        <DriversSection
+          drivers={workspace.drivers}
+          branches={workspace.branches}
+          people={workspace.people}
+          papers={workspace.driverPapers}
+          canWrite={workspace.permissions.includes("drivers.write")}
         />
       ) : null}
 

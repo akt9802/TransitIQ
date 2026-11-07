@@ -1,3 +1,4 @@
+import { ensureFleetSchema } from "@/lib/company/fleet-schema";
 import { getPool } from "@/lib/db";
 
 /** Company, people, and access tables. Safe to call more than once. */
@@ -162,6 +163,90 @@ export async function ensureCompanySchema(): Promise<void> {
       ))
       OR (r.key = 'dispatcher' AND p.key IN ('company.read', 'people.read', 'vehicles.read'))
       OR (r.key = 'accountant' AND p.key IN ('company.read', 'people.read', 'vehicles.read'))
+    )
+    ON CONFLICT DO NOTHING
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      plan text NOT NULL CHECK (plan IN ('free', 'pro', 'authority')),
+      status text NOT NULL CHECK (status IN ('trialing', 'active', 'past_due', 'canceled')),
+      vehicle_limit integer NOT NULL,
+      provider text,
+      provider_ref text,
+      current_period_end timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      name text NOT NULL,
+      key_hash text NOT NULL UNIQUE,
+      last_used_at timestamptz,
+      revoked_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_preferences (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id uuid NOT NULL REFERENCES fleet_users(id),
+      kind text NOT NULL CHECK (kind IN ('expiry', 'delay', 'hazard', 'repair', 'payment')),
+      channel text NOT NULL CHECK (channel IN ('push', 'email', 'sms', 'in_app')),
+      enabled boolean NOT NULL DEFAULT true,
+      UNIQUE (user_id, kind, channel)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_company ON subscriptions(company_id);
+    CREATE INDEX IF NOT EXISTS idx_api_keys_company ON api_keys(company_id);
+  `);
+
+  await pool.query(`
+    INSERT INTO subscriptions (company_id, plan, status, vehicle_limit)
+    SELECT c.id, c.plan, 'active', c.vehicle_limit
+    FROM companies c
+    WHERE NOT EXISTS (
+      SELECT 1 FROM subscriptions s WHERE s.company_id = c.id AND s.status <> 'canceled'
+    )
+  `);
+
+  await ensureFleetSchema();
+
+  await pool.query(`
+    INSERT INTO permissions (key, description) VALUES
+      ('branches.read', 'View branches'),
+      ('branches.write', 'Add or change branches'),
+      ('drivers.read', 'View drivers'),
+      ('drivers.write', 'Add or change drivers'),
+      ('vendors.read', 'View attached-truck owners'),
+      ('vendors.write', 'Add or change attached-truck owners'),
+      ('devices.read', 'View trackers'),
+      ('devices.write', 'Add or change trackers')
+    ON CONFLICT (key) DO NOTHING
+  `);
+
+  await pool.query(`
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id
+    FROM roles r
+    JOIN permissions p ON (
+      (r.key = 'owner' AND p.key IN (
+        'branches.read', 'branches.write', 'drivers.read', 'drivers.write',
+        'vendors.read', 'vendors.write', 'devices.read', 'devices.write'
+      ))
+      OR (r.key = 'fleet_manager' AND p.key IN (
+        'branches.read', 'branches.write', 'drivers.read', 'drivers.write',
+        'vendors.read', 'vendors.write', 'devices.read', 'devices.write'
+      ))
+      OR (r.key = 'dispatcher' AND p.key IN (
+        'branches.read', 'drivers.read', 'vendors.read', 'devices.read'
+      ))
+      OR (r.key = 'accountant' AND p.key IN (
+        'branches.read', 'drivers.read', 'vendors.read', 'devices.read'
+      ))
     )
     ON CONFLICT DO NOTHING
   `);

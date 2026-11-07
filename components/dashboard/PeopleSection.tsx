@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ASSIGNABLE_ROLES, type PersonRecord } from "@/lib/company/types";
+import { ASSIGNABLE_ROLES, type BranchRecord, type PersonRecord } from "@/lib/company/types";
 import { fieldClass, labelClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
 
 type Props = {
   people: PersonRecord[];
+  branches: BranchRecord[];
   canWrite: boolean;
 };
 
@@ -16,6 +17,7 @@ type Draft = {
   email: string;
   phone: string;
   roleKey: string;
+  branchId: string;
 };
 
 const emptyDraft = (): Draft => ({
@@ -24,9 +26,10 @@ const emptyDraft = (): Draft => ({
   email: "",
   phone: "",
   roleKey: "driver",
+  branchId: "",
 });
 
-export default function PeopleSection({ people, canWrite }: Props) {
+export default function PeopleSection({ people, branches, canWrite }: Props) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +43,7 @@ export default function PeopleSection({ people, canWrite }: Props) {
       email: person.email,
       phone: person.phone ?? "",
       roleKey: person.roleKey ?? "driver",
+      branchId: person.branchId ?? "",
     });
   }
 
@@ -127,6 +131,19 @@ export default function PeopleSection({ people, canWrite }: Props) {
               className={fieldClass}
               inputMode="tel"
             />
+          </label>
+          <label className={labelClass}>
+            Branch
+            <select
+              value={draft.branchId}
+              onChange={(e) => setDraft({ ...draft, branchId: e.target.value })}
+              className={fieldClass}
+            >
+              <option value="">No branch</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>{branch.name}</option>
+              ))}
+            </select>
           </label>
           <label className={labelClass}>
             Role
