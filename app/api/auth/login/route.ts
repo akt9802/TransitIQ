@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     const pool = getPool();
 
     const { rows } = await pool.query<{ id: string; password_hash: string | null }>(
-      `SELECT id, password_hash FROM fleet_users WHERE email = $1`,
+      `SELECT id, password_hash FROM fleet_users WHERE email = $1 AND deleted_at IS NULL`,
       [email]
     );
 

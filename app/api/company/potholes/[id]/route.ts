@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireMember, saved } from "@/app/api/company/guard";
+import { requireAccount, saved } from "@/app/api/company/guard";
 import { reviewPothole } from "@/lib/company/roads";
 
 type Context = { params: Promise<{ id: string }> };
@@ -7,7 +7,7 @@ type Context = { params: Promise<{ id: string }> };
 export async function POST(req: Request, context: Context) {
   const { id } = await context.params;
   try {
-    const access = await requireMember();
+    const access = await requireAccount();
     if ("error" in access) return access.error;
     if (access.workspace.owner.roleKey !== "road_authority") {
       return NextResponse.json({ error: "You cannot review this" }, { status: 403 });

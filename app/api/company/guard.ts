@@ -5,9 +5,10 @@ import { getWorkspace } from "@/lib/company/queries";
 import type { Workspace } from "@/lib/company/types";
 import { formatPgError } from "@/lib/db";
 
+type AccountAccess = { workspace: Workspace };
 type FleetAccess = { workspace: Workspace & { company: NonNullable<Workspace["company"]> } };
 
-async function loadFleet(): Promise<FleetAccess | { error: NextResponse }> {
+async function loadAccount(): Promise<AccountAccess | { error: NextResponse }> {
   const session = await getSession();
   if (!session) {
     return { error: NextResponse.json({ error: "Sign in required" }, { status: 401 }) };
@@ -17,18 +18,27 @@ async function loadFleet(): Promise<FleetAccess | { error: NextResponse }> {
   if (!workspace) {
     return { error: NextResponse.json({ error: "Account not found" }, { status: 404 }) };
   }
-  if (!workspace.company) {
-    return { error: NextResponse.json({ error: "Set up your fleet first" }, { status: 400 }) };
-  }
-  return { workspace: workspace as FleetAccess["workspace"] };
+  return { workspace };
+}
+
+export async function requireAccount() {
+  return loadAccount();
 }
 
 export async function requireMember() {
-  return loadFleet();
+  const access = await loadAccount();
+  if ("error" in access) return access;
+  if (access.workspace.owner.roleKey === "road_authority") {
+    return { error: NextResponse.json({ error: "You cannot view this fleet" }, { status: 403 }) };
+  }
+  if (!access.workspace.company) {
+    return { error: NextResponse.json({ error: "Set up your fleet first" }, { status: 400 }) };
+  }
+  return { workspace: access.workspace as FleetAccess["workspace"] };
 }
 
 export async function requireFleet(permission: string) {
-  const access = await loadFleet();
+  const access = await requireMember();
   if ("error" in access) return access;
   if (!access.workspace.permissions.includes(permission)) {
     return { error: NextResponse.json({ error: "You can't change this" }, { status: 403 }) };

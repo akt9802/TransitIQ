@@ -37,6 +37,9 @@ export async function POST(req: Request) {
     }
     const input = parseCompanyInput(await req.json());
     const result = await createFleet(session.sub, input);
+    if (result === "authority") {
+      return NextResponse.json({ error: "You cannot create a fleet" }, { status: 403 });
+    }
     if (result === "exists") {
       return NextResponse.json(
         { error: "This account already belongs to a fleet" },

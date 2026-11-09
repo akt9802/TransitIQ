@@ -183,7 +183,7 @@ export default function LoginForm() {
       <h1 className="text-2xl font-extrabold tracking-tight text-ink">{heading}</h1>
       <p className="mt-2 text-sm text-muted">
         {step === "login"
-          ? "Use the email and password for your fleet account."
+          ? "Use the email and password for this account."
           : step === "forgot" || purpose === "reset"
             ? "We’ll email a code so you can set a new password."
             : "New here? Verify your email, then set a password. Existing accounts sign in with password."}

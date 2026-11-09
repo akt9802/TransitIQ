@@ -107,7 +107,7 @@ export async function getWorkspace(userId: string): Promise<Workspace | null> {
     services: [],
   };
   let fleet = emptyFleet;
-  if (owner.company_id) {
+  if (owner.company_id && owner.role_key !== "road_authority") {
     const companyResult = await pool.query<CompanyRow>(
       `SELECT id, name, legal_name, gstin, phone, email, address, plan, vehicle_limit
        FROM companies
@@ -293,7 +293,7 @@ export async function listVehicles(companyId: string): Promise<VehicleRecord[]> 
 export async function createFleet(
   userId: string,
   input: CompanyInput
-): Promise<"created" | "exists"> {
+): Promise<"created" | "exists" | "authority"> {
   const pool = getPool();
   const client = await pool.connect();
   try {
@@ -319,6 +319,18 @@ export async function createFleet(
     );
     const roleId = role.rows[0]?.id;
     if (!roleId) throw new Error("Owner role is missing");
+
+    const roleNow = await client.query<{ key: string | null }>(
+      `SELECT r.key
+       FROM fleet_users u
+       LEFT JOIN roles r ON r.id = u.role_id
+       WHERE u.id = $1 AND u.deleted_at IS NULL`,
+      [userId]
+    );
+    if (roleNow.rows[0]?.key === "road_authority") {
+      await client.query("ROLLBACK");
+      return "authority";
+    }
 
     const updated = await client.query(
       `UPDATE fleet_users

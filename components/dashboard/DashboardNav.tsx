@@ -13,14 +13,15 @@ type Props = {
   fleetName: string;
   active: DashboardSection;
   items: Item[];
+  kicker?: string;
 };
 
-export default function DashboardNav({ fleetName, active, items }: Props) {
+export default function DashboardNav({ fleetName, active, items, kicker = "Fleet" }: Props) {
   return (
     <aside className="lg:sticky lg:top-24 lg:w-56 lg:shrink-0">
-      <p className="px-3 text-xs font-bold text-muted">Fleet</p>
+      <p className="px-3 text-xs font-bold text-muted">{kicker}</p>
       <p className="break-words px-3 text-lg font-extrabold tracking-tight text-ink">{fleetName}</p>
-      <nav className="mt-4 flex gap-2 overflow-x-auto lg:max-h-[calc(100vh-8rem)] lg:flex-col lg:overflow-y-auto" aria-label="Fleet sections">
+      <nav className="mt-4 flex gap-2 overflow-x-auto lg:max-h-[calc(100vh-8rem)] lg:flex-col lg:overflow-y-auto" aria-label="Sections">
         {items.map((item) => {
           const current = item.section === active;
           return (

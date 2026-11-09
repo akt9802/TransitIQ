@@ -23,6 +23,12 @@ function place(spot: { latitude: number; longitude: number }) {
   return `${spot.latitude.toFixed(5)}, ${spot.longitude.toFixed(5)}`;
 }
 
+function who(spot: { driverName?: string; firstDriver?: string; fleetName: string; vehicleRegistration: string | null }) {
+  const driver = spot.driverName ?? spot.firstDriver ?? "Driver";
+  const truck = spot.vehicleRegistration ?? "No truck on a trip";
+  return `${driver} · ${spot.fleetName} · ${truck}`;
+}
+
 function IssueMap({ spots }: { spots: RoadIssue[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -44,7 +50,7 @@ function IssueMap({ spots }: { spots: RoadIssue[] }) {
         for (const spot of spots) {
           const position = { lat: spot.latitude, lng: spot.longitude };
           bounds.extend(position);
-          new google.maps.Marker({ map, position, title: `${ISSUE_LABEL[spot.kind]} · ${spot.firstDriver}` });
+          new google.maps.Marker({ map, position, title: who(spot) });
         }
         if (spots.length > 1) map.fitBounds(bounds);
       })
@@ -314,7 +320,7 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
                 <Image alt="" className="object-cover" fill sizes="56px" src={`/api/company/media/pothole/${spot.photoId}`} unoptimized />
               </span>
               <span className="min-w-0 flex-1 text-sm text-ink">
-                {spot.driverName} · {when(spot.reportedAt)} · {place(spot)}
+                {who(spot)} · {when(spot.reportedAt)} · {place(spot)}
                 {spot.stale ? " · Older than 3 days. Drivers are not warned." : ""}
               </span>
               <button type="button" className={primaryBtn} disabled={busy} onClick={() => void decide(spot.id, "approve")}>Confirm</button>
@@ -333,7 +339,7 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
                 <Image alt="" className="object-cover" fill sizes="56px" src={`/api/company/media/pothole/${spot.photoId}`} unoptimized />
               </span>
               <span className="min-w-0 flex-1 text-sm text-ink">
-                {spot.firstDriver} · {when(spot.reportedAt)} · {place(spot)}
+                {who(spot)} · {when(spot.reportedAt)} · {place(spot)}
                 {spot.drivers > 1 ? ` · ${spot.drivers} drivers` : ""}
                 {spot.teamSentAt ? ` · Team sent ${when(spot.teamSentAt)}` : ""}
               </span>

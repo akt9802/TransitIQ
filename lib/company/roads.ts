@@ -20,6 +20,8 @@ export type RoadIssue = {
   reportedAt: string;
   photoId: string;
   firstDriver: string;
+  fleetName: string;
+  vehicleRegistration: string | null;
   drivers: number;
   teamSentAt: string | null;
 };
@@ -40,6 +42,8 @@ export type PendingIssue = {
   reportedAt: string;
   photoId: string;
   driverName: string;
+  fleetName: string;
+  vehicleRegistration: string | null;
   stale: boolean;
 };
 
@@ -71,6 +75,16 @@ export async function reportPothole(
     );
     if (!driver.rows[0]) throw new Error("Choose a driver in this fleet");
     if (driver.rows[0].status === "inactive") throw new Error("This driver is inactive");
+    const truck = await client.query<{ vehicle_id: string }>(
+      `SELECT vehicle_id FROM trips
+       WHERE driver_id = $1 AND company_id = $2 AND deleted_at IS NULL
+         AND status IN ('started', 'loading', 'in_transit', 'unloading')
+         AND vehicle_id IS NOT NULL
+       ORDER BY started_at DESC NULLS LAST
+       LIMIT 1`,
+      [driverId, companyId]
+    );
+    const vehicleId = truck.rows[0]?.vehicle_id ?? null;
 
     const here = { lat: latitude, lng: longitude };
     const around = await nearbyIssues(client, here, kind);
@@ -82,9 +96,9 @@ export async function reportPothole(
       try {
         await client.query(
           `INSERT INTO pothole_reports
-             (company_id, pothole_id, driver_id, image, latitude, longitude, points, status, awarded_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'approved', now())`,
-          [companyId, open.id, driverId, image, latitude, longitude, REPEAT_POINTS]
+             (company_id, pothole_id, driver_id, vehicle_id, image, latitude, longitude, points, status, awarded_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'approved', now())`,
+          [companyId, open.id, driverId, vehicleId, image, latitude, longitude, REPEAT_POINTS]
         );
       } catch (error) {
         if (error && typeof error === "object" && "code" in error && error.code === "23505") {
@@ -102,9 +116,9 @@ export async function reportPothole(
     );
     await client.query(
       `INSERT INTO pothole_reports
-         (company_id, pothole_id, driver_id, image, latitude, longitude, points, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 0, 'pending')`,
-      [companyId, created.rows[0].id, driverId, image, latitude, longitude]
+         (company_id, pothole_id, driver_id, vehicle_id, image, latitude, longitude, points, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 'pending')`,
+      [companyId, created.rows[0].id, driverId, vehicleId, image, latitude, longitude]
     );
     await client.query("COMMIT");
     return { state: "pending" as const, points: 0 };
@@ -169,16 +183,20 @@ const SPOT_SQL = `
          (p.kind = 'accident' AND p.created_at <= now() - interval '3 days') AS stale,
          first_report.id AS photo_id,
          first_driver.full_name AS first_driver,
+         reporter_fleet.name AS fleet_name,
+         reporter_truck.registration_number AS vehicle_registration,
          (SELECT COUNT(*)::int FROM pothole_reports r WHERE r.pothole_id = p.id AND r.status = 'approved') AS drivers
   FROM potholes p
   JOIN LATERAL (
-    SELECT r.id, r.driver_id
+    SELECT r.id, r.driver_id, r.company_id, r.vehicle_id
     FROM pothole_reports r
     WHERE r.pothole_id = p.id AND r.status <> 'rejected'
     ORDER BY r.created_at ASC
     LIMIT 1
   ) first_report ON true
   JOIN drivers first_driver ON first_driver.id = first_report.driver_id
+  JOIN companies reporter_fleet ON reporter_fleet.id = first_report.company_id
+  LEFT JOIN vehicles reporter_truck ON reporter_truck.id = first_report.vehicle_id
 `;
 
 export async function roadCondition() {
@@ -400,6 +418,8 @@ type SpotRow = {
   stale: boolean;
   photo_id: string;
   first_driver: string;
+  fleet_name: string;
+  vehicle_registration: string | null;
   drivers: number;
 };
 
@@ -414,6 +434,8 @@ function toIssue(row: SpotRow): RoadIssue[] {
     reportedAt: row.reported_at.toISOString(),
     photoId: row.photo_id,
     firstDriver: row.first_driver,
+    fleetName: row.fleet_name,
+    vehicleRegistration: row.vehicle_registration,
     drivers: row.drivers,
     teamSentAt: row.team_sent_at ? row.team_sent_at.toISOString() : null,
   }];
@@ -430,6 +452,8 @@ function toPending(row: SpotRow): PendingIssue[] {
     reportedAt: row.reported_at.toISOString(),
     photoId: row.photo_id,
     driverName: row.first_driver,
+    fleetName: row.fleet_name,
+    vehicleRegistration: row.vehicle_registration,
     stale: row.stale,
   }];
 }

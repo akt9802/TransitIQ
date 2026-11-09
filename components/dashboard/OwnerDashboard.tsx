@@ -150,6 +150,22 @@ export default function OwnerDashboard({
     }
   }
 
+  if (roadManager) {
+    return (
+      <main id="main" className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:flex-row lg:items-start">
+        <DashboardNav
+          kicker="Roads"
+          fleetName={workspace.owner.fullName?.trim() || "Road manager"}
+          active="roads"
+          items={navItems}
+        />
+        <div className="min-w-0 flex-1">
+          <RoadSection mine={false} linked={false} />
+        </div>
+      </main>
+    );
+  }
+
   const title = workspace.company?.name ?? "Set up your fleet";
   const intro = hasCompany
     ? "These details are used on invoices and the tracking page."

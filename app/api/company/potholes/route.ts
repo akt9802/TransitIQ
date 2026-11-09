@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { requireMember, saved } from "@/app/api/company/guard";
+import { requireAccount, requireMember, saved } from "@/app/api/company/guard";
 import { issueKind } from "@/lib/company/road-kinds";
 import { ownPotholes, reportPothole, roadCondition } from "@/lib/company/roads";
 
 export async function GET() {
   try {
-    const access = await requireMember();
+    const access = await requireAccount();
     if ("error" in access) return access.error;
     const { company, owner } = access.workspace;
     if (owner.roleKey === "driver") {
-      if (!owner.driverId) return NextResponse.json({ monthPoints: 0, monthRupees: 0, earlierPoints: 0, reports: [] });
+      if (!company || !owner.driverId) return NextResponse.json({ monthPoints: 0, monthRupees: 0, earlierPoints: 0, reports: [] });
       return NextResponse.json(await ownPotholes(company.id, owner.driverId));
     }
     if (owner.roleKey !== "road_authority") {
