@@ -8,6 +8,7 @@ import FuelSection from "@/components/dashboard/FuelSection";
 import PeopleSection from "@/components/dashboard/PeopleSection";
 import PaperReminders from "@/components/dashboard/PaperReminders";
 import PerformanceSection from "@/components/dashboard/PerformanceSection";
+import RoadSection from "@/components/dashboard/RoadSection";
 import TripTracker from "@/components/dashboard/TripTracker";
 import TripsSection from "@/components/dashboard/TripsSection";
 import { Alert } from "@/components/dashboard/frame";
@@ -68,7 +69,7 @@ function planLabel(plan: string): string {
   return "Free";
 }
 
-const SECTIONS: DashboardSection[] = ["company", "people", "vehicles", "drivers", "trips", "performance", "fuel"];
+const SECTIONS: DashboardSection[] = ["company", "people", "vehicles", "drivers", "trips", "performance", "fuel", "points", "roads"];
 
 function requestedSection(value: string | undefined): DashboardSection | null {
   return SECTIONS.find((section) => section === value) ?? null;
@@ -89,13 +90,14 @@ export default function OwnerDashboard({
   const canSeeVehicles = workspace.permissions.includes("vehicles.read");
   const canSeeDrivers = workspace.permissions.includes("drivers.read");
   const canSeeTrips = workspace.permissions.includes("trips.read");
+  const roadManager = workspace.owner.roleKey === "road_authority";
   const link = (section: DashboardSection, label: string, count?: number) => ({
     section,
     label,
     href: section === "company" ? "/dashboard" : `/dashboard?section=${section}`,
     count,
   });
-  const navItems = [
+  const navItems = roadManager ? [link("roads", "Road condition")] : [
     canSeeCompany ? link("company", "Company") : null,
     canSeePeople ? link("people", "People", workspace.people.length) : null,
     canSeeVehicles ? link("vehicles", "Vehicles", workspace.vehicles.length) : null,
@@ -109,6 +111,7 @@ export default function OwnerDashboard({
       : null,
     canSeeTrips ? link("performance", workspace.owner.roleKey === "driver" ? "My day" : "Performance") : null,
     canSeeTrips ? link("fuel", "Fuel") : null,
+    canSeeTrips && workspace.owner.roleKey === "driver" ? link("points", "Points") : null,
   ].filter((item) => item !== null);
   const requested = requestedSection(section);
   const active =
@@ -164,7 +167,7 @@ export default function OwnerDashboard({
       ) : null}
 
       <div className="min-w-0 flex-1">
-      {hasCompany ? <PaperReminders /> : null}
+      {hasCompany && !roadManager ? <PaperReminders /> : null}
       {!hasCompany || active === "company" ? (
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
@@ -279,6 +282,14 @@ export default function OwnerDashboard({
 
       {hasCompany && active === "performance" && canSeeTrips ? (
         <PerformanceSection mine={workspace.owner.roleKey === "driver"} />
+      ) : null}
+
+      {hasCompany && active === "points" && workspace.owner.roleKey === "driver" ? (
+        <RoadSection mine linked={Boolean(workspace.owner.driverId)} />
+      ) : null}
+
+      {hasCompany && active === "roads" && roadManager ? (
+        <RoadSection mine={false} linked={false} />
       ) : null}
 
       {hasCompany && active === "fuel" && canSeeTrips ? (

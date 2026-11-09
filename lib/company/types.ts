@@ -45,6 +45,7 @@ export const ASSIGNABLE_ROLES = [
   { key: "accountant", label: "Accountant" },
   { key: "driver", label: "Driver" },
   { key: "mechanic", label: "Mechanic" },
+  { key: "road_authority", label: "Road manager" },
 ] as const;
 
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number]["key"];

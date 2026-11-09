@@ -183,6 +183,39 @@ export async function ensureFleetSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_service_schedules_vehicle ON service_schedules(vehicle_id);
     ALTER TABLE service_schedules ADD COLUMN IF NOT EXISTS skip_trip_id uuid;
 
+    CREATE TABLE IF NOT EXISTS potholes (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      latitude double precision NOT NULL,
+      longitude double precision NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_potholes_company ON potholes(company_id, latitude);
+
+    CREATE TABLE IF NOT EXISTS pothole_reports (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      pothole_id uuid NOT NULL REFERENCES potholes(id),
+      driver_id uuid NOT NULL REFERENCES drivers(id),
+      image bytea NOT NULL,
+      latitude double precision NOT NULL,
+      longitude double precision NOT NULL,
+      points integer NOT NULL CHECK (points IN (12, 3)),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (pothole_id, driver_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_pothole_reports_driver ON pothole_reports(driver_id, created_at DESC);
+
+    INSERT INTO permissions (key, description) VALUES
+      ('roads.read', 'See potholes reported on the road')
+    ON CONFLICT (key) DO NOTHING;
+
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id
+    FROM roles r
+    JOIN permissions p ON r.key = 'road_authority' AND p.key = 'roads.read'
+    ON CONFLICT DO NOTHING;
+
     CREATE TABLE IF NOT EXISTS service_done (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id uuid NOT NULL REFERENCES companies(id),
