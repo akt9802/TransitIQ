@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AdminLiveTrips from "@/components/dashboard/AdminLiveTrips";
 import { Modal } from "@/components/Modal";
 import { Actions, Alert, Field, SectionCard, useFleetSave } from "@/components/dashboard/frame";
@@ -18,6 +18,7 @@ import { loadGoogleMaps } from "@/components/maps/loadGoogleMaps";
 import { PlaceSearch, TripMap } from "@/components/maps/TripPlaces";
 import { fieldClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
 import { indiaToday } from "@/lib/company/paper-rules";
+import { paceCopy, roadPace } from "@/lib/company/trip-pace";
 import { currentKm, dueServices, tripServiceNote, type ServiceView } from "@/lib/company/service-rules";
 import {
   LIVE_TRIP_STATUSES,
@@ -243,6 +244,20 @@ export default function TripsSection({
   const booking = draft ? draftWindow(draft.stops) : null;
   const busyDrivers = booking ? bookedIds(trips, draft?.id ?? null, booking, "driverId") : new Set<string>();
   const busyTrucks = booking ? bookedIds(trips, draft?.id ?? null, booking, "vehicleId") : new Set<string>();
+  const pace = useMemo(() => {
+    if (!draft) return null;
+    const found = roadPace(trips, { id: draft.id, stops: draft.stops });
+    if (!found) return null;
+    const end = draft.stops[draft.stops.length - 1];
+    return paceCopy(found, {
+      start: draft.stops[0]?.scheduledAt ?? "",
+      end: end?.scheduledAt ?? "",
+      deadline: draft.deadlineAt,
+    });
+  }, [draft, trips]);
+  const endsChosen = Boolean(
+    draft && draft.stops[0]?.latitude != null && draft.stops[draft.stops.length - 1]?.latitude != null
+  );
   useEffect(() => {
     if (ownDriverId) return;
     const interval = window.setInterval(() => router.refresh(), 20000);
@@ -547,6 +562,14 @@ export default function TripsSection({
               </Field>
             </div>
           ))}
+          {pace ? (
+            <div className="border-2 border-ink bg-paper px-3 py-2 sm:col-span-2">
+              <p className="text-sm text-ink">{pace.summary}</p>
+              {pace.warning ? <p className="mt-1 text-sm font-extrabold text-ink">{pace.warning}</p> : null}
+            </div>
+          ) : endsChosen ? (
+            <p className="text-sm text-muted sm:col-span-2">No finished trip has started and ended near these places.</p>
+          ) : null}
           <div className="sm:col-span-2">
             <TripMap
               stops={draft.stops}
@@ -659,6 +682,7 @@ export default function TripsSection({
         saving={saving}
         services={services}
         vehicles={vehicles}
+        samples={trips}
         onEdit={edit}
         onDeliver={deliverFirst}
         onServiceFirst={serviceFirst}
@@ -878,6 +902,7 @@ function TripCard({
   onDeliver,
   onServiceFirst,
   onStatus,
+  samples,
 }: {
   trip: TripRecord;
   queue: TripRecord[];
@@ -888,6 +913,7 @@ function TripCard({
   past?: boolean;
   services?: ServiceView[];
   vehicles?: VehicleRecord[];
+  samples?: TripRecord[];
   onEdit: (trip: TripRecord) => void;
   onCopy?: (trip: TripRecord) => void;
   onDeliver?: (trip: TripRecord) => void;
@@ -913,6 +939,16 @@ function TripCard({
     indiaToday()
   );
   const serviceAllowed = due.length > 0 && due.every((service) => service.skipTripId === trip.id);
+  const pace = canWrite && queued && samples
+    ? roadPace(samples, trip)
+    : null;
+  const paceLine = pace
+    ? paceCopy(pace, {
+        start: trip.stops[0]?.scheduledAt ?? "",
+        end: lastStop?.scheduledAt ?? "",
+        deadline: trip.deadlineAt ?? "",
+      })
+    : null;
   const badge = place >= 0 ? (place === 0 ? "Next" : `Queue ${place + 1}`) : statusLabel(trip.status);
   const facts = [
     trip.driverName ?? "No driver",
@@ -931,6 +967,12 @@ function TripCard({
           <h3 className={past ? "text-2xl font-extrabold text-ink" : "text-lg font-extrabold text-ink"}>{trip.customerName}</h3>
           <p className="mt-1 text-sm text-muted">{facts.join(" · ")}</p>
           {past ? null : <ServiceNote trip={trip} services={services} vehicles={vehicles} legs={legs} canWrite={canWrite} />}
+          {paceLine ? (
+            <p className="mt-2 max-w-xl text-sm text-ink">
+              {paceLine.summary}
+              {paceLine.warning ? <span className="mt-1 block font-extrabold">{paceLine.warning}</span> : null}
+            </p>
+          ) : null}
         </div>
         <span className="rounded-md border-2 border-ink px-2 py-1 text-xs font-extrabold uppercase tracking-wider text-ink">
           {badge}
@@ -1092,6 +1134,7 @@ function TripGroup({
   onDeliver,
   onServiceFirst,
   onStatus,
+  samples,
 }: {
   title: string;
   caption?: string;
@@ -1105,6 +1148,7 @@ function TripGroup({
   saving: boolean;
   services?: ServiceView[];
   vehicles?: VehicleRecord[];
+  samples?: TripRecord[];
   onEdit: (trip: TripRecord) => void;
   onCopy?: (trip: TripRecord) => void;
   onDeliver?: (trip: TripRecord) => void;
@@ -1129,6 +1173,7 @@ function TripGroup({
               past={emphasis}
               services={services}
               vehicles={vehicles}
+              samples={samples}
               onEdit={onEdit}
               onDeliver={onDeliver}
               onServiceFirst={onServiceFirst}
