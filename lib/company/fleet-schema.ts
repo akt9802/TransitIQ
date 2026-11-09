@@ -206,6 +206,18 @@ export async function ensureFleetSchema(): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_pothole_reports_driver ON pothole_reports(driver_id, created_at DESC);
 
+    ALTER TABLE potholes ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'open';
+    ALTER TABLE potholes DROP CONSTRAINT IF EXISTS potholes_status_check;
+    ALTER TABLE potholes ADD CONSTRAINT potholes_status_check CHECK (status IN ('pending', 'open', 'fixed', 'rejected'));
+
+    ALTER TABLE pothole_reports ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'approved';
+    ALTER TABLE pothole_reports ADD COLUMN IF NOT EXISTS awarded_at timestamptz;
+    ALTER TABLE pothole_reports DROP CONSTRAINT IF EXISTS pothole_reports_points_check;
+    ALTER TABLE pothole_reports ADD CONSTRAINT pothole_reports_points_check CHECK (points IN (0, 3, 12));
+    ALTER TABLE pothole_reports DROP CONSTRAINT IF EXISTS pothole_reports_status_check;
+    ALTER TABLE pothole_reports ADD CONSTRAINT pothole_reports_status_check CHECK (status IN ('pending', 'approved', 'rejected'));
+    UPDATE pothole_reports SET awarded_at = created_at WHERE awarded_at IS NULL AND points > 0;
+
     INSERT INTO permissions (key, description) VALUES
       ('roads.read', 'See potholes reported on the road')
     ON CONFLICT (key) DO NOTHING;

@@ -47,6 +47,8 @@ export default function TripTracker({ tripId }: { tripId: string }) {
   const liveAlert = useSyncExternalStore(subscribeRestAlerts, restAlertPermission, restAlertServer);
   const alerts = chosenAlert ?? liveAlert;
   const warned = useRef(new Set<string>());
+  const warnedHoles = useRef(new Set<string>());
+  const [ahead, setAhead] = useState<string | null>(null);
 
   const apply = useCallback((next: Duty) => {
     setDuty(next);
@@ -124,13 +126,44 @@ export default function TripTracker({ tripId }: { tripId: string }) {
       );
     }
 
+    async function look(latitude: number, longitude: number) {
+      const response = await fetch(`/api/company/potholes/ahead?latitude=${latitude}&longitude=${longitude}&tripId=${tripId}`);
+      const data = (await response.json().catch(() => null)) as { text?: string | null; potholeId?: string | null } | null;
+      if (stopped || !response.ok || !data) return;
+      setAhead(data.text ?? null);
+      if (!data.text || !data.potholeId || warnedHoles.current.has(data.potholeId)) return;
+      warnedHoles.current.add(data.potholeId);
+      if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+      try {
+        new Notification("Slow down", { body: data.text });
+      } catch {
+        /* The line on the trip still shows. */
+      }
+    }
+
+    function watchRoad() {
+      if (stopped || !navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (!stopped) void look(position.coords.latitude, position.coords.longitude);
+        },
+        () => {
+          if (!stopped) setAhead(null);
+        },
+        { enableHighAccuracy: true, maximumAge: 10_000, timeout: 12_000 }
+      );
+    }
+
     void loadSnapshot();
     const refresh = window.setInterval(() => void loadSnapshot(), 60_000);
     ping();
+    watchRoad();
     const timer = window.setInterval(ping, GAP_MS);
+    const roadTimer = window.setInterval(watchRoad, 20_000);
     return () => {
       stopped = true;
       window.clearInterval(timer);
+      window.clearInterval(roadTimer);
       window.clearInterval(refresh);
     };
   }, [apply, tripId]);
@@ -148,6 +181,9 @@ export default function TripTracker({ tripId }: { tripId: string }) {
 
   return (
     <>
+      {ahead ? (
+        <p className="mt-4 border-2 border-ink bg-accent-warm/40 px-3 py-2 text-sm font-extrabold text-ink">{ahead}</p>
+      ) : null}
       {off ? (
         <p className="mt-4 border-2 border-ink bg-accent-warm/40 px-3 py-2 text-sm font-extrabold text-ink">
           Location is off. Turn it on so this trip can be tracked.

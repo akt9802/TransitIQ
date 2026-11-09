@@ -6,13 +6,13 @@ import { Alert } from "@/components/dashboard/frame";
 import { readHere } from "@/components/dashboard/photo";
 import { primaryBtn, quietBtn } from "@/components/dashboard/styles";
 import { loadGoogleMaps } from "@/components/maps/loadGoogleMaps";
-import type { OwnReport, PotholeSpot } from "@/lib/company/roads";
+import type { OwnReport, PendingPothole, PotholeSpot } from "@/lib/company/roads";
 
 function when(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 }
 
-function place(spot: PotholeSpot) {
+function place(spot: { latitude: number; longitude: number }) {
   return `${spot.latitude.toFixed(5)}, ${spot.longitude.toFixed(5)}`;
 }
 
@@ -61,6 +61,7 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
   const [monthPoints, setMonthPoints] = useState(0);
   const [earlierPoints, setEarlierPoints] = useState(0);
   const [reports, setReports] = useState<OwnReport[]>([]);
+  const [queue, setQueue] = useState<PendingPothole[]>([]);
   const [potholes, setPotholes] = useState<PotholeSpot[]>([]);
 
   function stopCamera() {
@@ -81,6 +82,7 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
       monthPoints?: number;
       earlierPoints?: number;
       reports?: OwnReport[];
+      queue?: PendingPothole[];
       potholes?: PotholeSpot[];
     };
     if (!response.ok) {
@@ -90,6 +92,7 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
     setMonthPoints(body.monthPoints ?? 0);
     setEarlierPoints(body.earlierPoints ?? 0);
     setReports(body.reports ?? []);
+    setQueue(body.queue ?? []);
     setPotholes(body.potholes ?? []);
   }
 
@@ -99,6 +102,33 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  async function decide(id: string, action: "approve" | "reject" | "fix") {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch(`/api/company/potholes/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const payload = (await response.json()) as { error?: string; outcome?: string };
+      if (!response.ok) throw new Error(payload.error ?? "The pothole could not be updated");
+      setNotice(payload.outcome === "duplicate"
+        ? "That place is already confirmed, so this photo was rejected."
+        : payload.outcome === "approved"
+          ? "Confirmed. The driver gets 12 points."
+          : payload.outcome === "fixed"
+            ? "Marked fixed. Drivers are no longer warned."
+            : "Rejected. It stays off the map.");
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The pothole could not be updated");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function openCamera() {
     setError(null);
@@ -153,10 +183,12 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
       body.set("longitude", String(here.longitude));
       body.set("photo", file, "pothole.jpg");
       const response = await fetch("/api/company/potholes", { method: "POST", body });
-      const payload = (await response.json()) as { error?: string; repeat?: boolean };
+      const payload = (await response.json()) as { error?: string; state?: string };
       if (!response.ok) throw new Error(payload.error ?? "The pothole could not be sent");
       stopCamera();
-      setNotice(payload.repeat ? "3 points. This pothole was already reported." : "12 points. You reported this pothole first.");
+      setNotice(payload.state === "repeat"
+        ? "3 points. This pothole is already confirmed."
+        : "Sent. The 12 points come after the road manager confirms the photo.");
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The pothole could not be sent");
@@ -171,7 +203,7 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-ink">Points</h1>
           <p className="mt-2 max-w-xl text-sm text-muted">
-            Open the camera at the pothole. The phone’s place is saved with the photo. The first report of that place, from any fleet, is 12 points. A report within 50 metres is 3 points. One point is one rupee this month.
+            Open the camera at the pothole. The phone’s place is saved with the photo. You get 12 points only after the road manager confirms it. A pothole already confirmed within 50 metres is 3 points. One point is one rupee this month.
           </p>
         </div>
         <p className="text-2xl font-extrabold text-ink">{monthPoints} points · ₹{monthPoints}</p>
@@ -201,7 +233,9 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
               <span className="relative h-14 w-14 shrink-0 overflow-hidden border-2 border-ink">
                 <Image alt="" className="object-cover" fill sizes="56px" src={`/api/company/media/pothole/${report.id}`} unoptimized />
               </span>
-              <span className="text-sm text-ink">{when(report.reportedAt)} · {report.points} points</span>
+              <span className="text-sm text-ink">
+                {when(report.reportedAt)} · {report.status === "pending" ? "Waiting for confirmation" : `${report.points} points`}
+              </span>
             </li>
           ))}
         </ul>
@@ -214,24 +248,44 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight text-ink">Road condition</h1>
         <p className="mt-2 max-w-xl text-sm text-muted">
-          {potholes.length} pothole{potholes.length === 1 ? "" : "s"} reported by drivers from any fleet. Reports within 50 metres are the same place.
+          Confirm a photo before it goes on the map. Mark it fixed when the hole is gone. Until then, a driver on that road is told to slow down.
         </p>
       </div>
       <Alert message={error} onClose={() => setError(null)} />
+      {notice ? <p className="text-sm font-extrabold text-ink">{notice}</p> : null}
+      <h2 className="text-lg font-extrabold text-ink">Waiting</h2>
+      {queue.length === 0 ? <p className="text-sm text-muted">No photos waiting.</p> : (
+        <ul className="divide-y divide-ink/15">
+          {queue.map((spot) => (
+            <li key={spot.id} className="flex flex-wrap items-center gap-3 py-3">
+              <span className="relative h-14 w-14 shrink-0 overflow-hidden border-2 border-ink">
+                <Image alt="" className="object-cover" fill sizes="56px" src={`/api/company/media/pothole/${spot.photoId}`} unoptimized />
+              </span>
+              <span className="min-w-0 flex-1 text-sm text-ink">{spot.driverName} · {when(spot.reportedAt)} · {place(spot)}</span>
+              <button type="button" className={primaryBtn} disabled={busy} onClick={() => void decide(spot.id, "approve")}>Confirm</button>
+              <button type="button" className={quietBtn} disabled={busy} onClick={() => void decide(spot.id, "reject")}>Reject</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <h2 className="text-lg font-extrabold text-ink">On the road</h2>
       <PotholeMap spots={potholes} />
-      <ul className="divide-y divide-ink/15">
-        {potholes.map((spot) => (
-          <li key={spot.id} className="flex items-center gap-3 py-3">
-            <span className="relative h-14 w-14 shrink-0 overflow-hidden border-2 border-ink">
-              <Image alt="" className="object-cover" fill sizes="56px" src={`/api/company/media/pothole/${spot.photoId}`} unoptimized />
-            </span>
-            <span className="text-sm text-ink">
-              {spot.firstDriver} · {when(spot.reportedAt)} · {place(spot)}
-              {spot.drivers > 1 ? ` · ${spot.drivers} drivers` : ""}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {potholes.length === 0 ? <p className="text-sm text-muted">No open potholes.</p> : (
+        <ul className="divide-y divide-ink/15">
+          {potholes.map((spot) => (
+            <li key={spot.id} className="flex flex-wrap items-center gap-3 py-3">
+              <span className="relative h-14 w-14 shrink-0 overflow-hidden border-2 border-ink">
+                <Image alt="" className="object-cover" fill sizes="56px" src={`/api/company/media/pothole/${spot.photoId}`} unoptimized />
+              </span>
+              <span className="min-w-0 flex-1 text-sm text-ink">
+                {spot.firstDriver} · {when(spot.reportedAt)} · {place(spot)}
+                {spot.drivers > 1 ? ` · ${spot.drivers} drivers` : ""}
+              </span>
+              <button type="button" className={quietBtn} disabled={busy} onClick={() => void decide(spot.id, "fix")}>Fixed</button>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
