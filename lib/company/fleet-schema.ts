@@ -209,6 +209,10 @@ export async function ensureFleetSchema(): Promise<void> {
     ALTER TABLE potholes ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'open';
     ALTER TABLE potholes DROP CONSTRAINT IF EXISTS potholes_status_check;
     ALTER TABLE potholes ADD CONSTRAINT potholes_status_check CHECK (status IN ('pending', 'open', 'fixed', 'rejected'));
+    ALTER TABLE potholes ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'pothole';
+    ALTER TABLE potholes DROP CONSTRAINT IF EXISTS potholes_kind_check;
+    ALTER TABLE potholes ADD CONSTRAINT potholes_kind_check CHECK (kind IN ('pothole', 'water', 'accident', 'other'));
+    ALTER TABLE potholes ADD COLUMN IF NOT EXISTS team_sent_at timestamptz;
 
     ALTER TABLE pothole_reports ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'approved';
     ALTER TABLE pothole_reports ADD COLUMN IF NOT EXISTS awarded_at timestamptz;

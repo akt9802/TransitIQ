@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireMember, saved } from "@/app/api/company/guard";
+import { issueKind } from "@/lib/company/road-kinds";
 import { ownPotholes, reportPothole, roadCondition } from "@/lib/company/roads";
 
 export async function GET() {
@@ -29,9 +30,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "You cannot report this" }, { status: 403 });
     }
     const form = await req.formData();
+    const kind = issueKind(form.get("kind"));
     const latitude = Number(form.get("latitude"));
     const longitude = Number(form.get("longitude"));
     const photo = form.get("photo");
+    if (!kind) return NextResponse.json({ error: "Choose the kind of issue" }, { status: 400 });
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return NextResponse.json({ error: "Location is required" }, { status: 400 });
     }
@@ -39,7 +42,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Photo is required" }, { status: 400 });
     }
     const bytes = Buffer.from(await photo.arrayBuffer());
-    const result = await reportPothole(company.id, owner.driverId, latitude, longitude, bytes);
+    const result = await reportPothole(company.id, owner.driverId, kind, latitude, longitude, bytes);
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     return saved(error, "roads");

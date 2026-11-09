@@ -4,36 +4,43 @@ import { assertJpeg, photoBytes } from "@/lib/company/files";
 import { ensureFleetSchema } from "@/lib/company/fleet-schema";
 import { metersBetween } from "@/lib/company/geo";
 import { indiaToday } from "@/lib/company/paper-rules";
+import { accidentExpired, issueKind, warnLine, type IssueKind } from "@/lib/company/road-kinds";
 
 export const POTHOLE_METERS = 50;
 export const FIRST_POINTS = 12;
 export const REPEAT_POINTS = 3;
 const WARN_METERS = 400;
+const LIVE_SQL = `(p.kind <> 'accident' OR p.created_at > now() - interval '3 days')`;
 
-export type PotholeSpot = {
+export type RoadIssue = {
   id: string;
+  kind: IssueKind;
   latitude: number;
   longitude: number;
   reportedAt: string;
   photoId: string;
   firstDriver: string;
   drivers: number;
+  teamSentAt: string | null;
 };
 
 export type OwnReport = {
   id: string;
+  kind: IssueKind;
   points: number;
   reportedAt: string;
   status: "pending" | "approved";
 };
 
-export type PendingPothole = {
+export type PendingIssue = {
   id: string;
+  kind: IssueKind;
   latitude: number;
   longitude: number;
   reportedAt: string;
   photoId: string;
   driverName: string;
+  stale: boolean;
 };
 
 function indiaMonth(now = new Date()) {
@@ -43,6 +50,7 @@ function indiaMonth(now = new Date()) {
 export async function reportPothole(
   companyId: string,
   driverId: string,
+  kind: IssueKind,
   latitude: number,
   longitude: number,
   image: Buffer
@@ -65,11 +73,11 @@ export async function reportPothole(
     if (driver.rows[0].status === "inactive") throw new Error("This driver is inactive");
 
     const here = { lat: latitude, lng: longitude };
-    const around = await nearbyPotholes(client, here);
-    if (around.some((spot) => spot.driverId === driverId && (spot.status === "pending" || spot.status === "open") && spot.meters <= POTHOLE_METERS)) {
-      throw new Error("You already reported this pothole");
+    const around = await nearbyIssues(client, here, kind);
+    if (around.some((spot) => blocksSameDriver(spot, driverId))) {
+      throw new Error("You already reported this issue");
     }
-    const open = closest(around, "open");
+    const open = closestLive(around);
     if (open) {
       try {
         await client.query(
@@ -80,17 +88,17 @@ export async function reportPothole(
         );
       } catch (error) {
         if (error && typeof error === "object" && "code" in error && error.code === "23505") {
-          throw new Error("You already reported this pothole");
+          throw new Error("You already reported this issue");
         }
         throw error;
       }
-      await rejectPendingNear(client, here, open.id);
+      await rejectPendingNear(client, here, kind, open.id);
       await client.query("COMMIT");
       return { state: "repeat" as const, points: REPEAT_POINTS };
     }
     const created = await client.query<{ id: string }>(
-      `INSERT INTO potholes (company_id, latitude, longitude, status) VALUES ($1, $2, $3, 'pending') RETURNING id`,
-      [companyId, latitude, longitude]
+      `INSERT INTO potholes (company_id, latitude, longitude, status, kind) VALUES ($1, $2, $3, 'pending', $4) RETURNING id`,
+      [companyId, latitude, longitude, kind]
     );
     await client.query(
       `INSERT INTO pothole_reports
@@ -127,11 +135,12 @@ export async function ownPotholes(companyId: string, driverId: string) {
          AND to_char(awarded_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM') <> $2`,
       [driverId, month]
     ),
-    pool.query<{ id: string; points: number; reported_at: Date; status: "pending" | "approved" }>(
-      `SELECT id, points, created_at AS reported_at, status
-       FROM pothole_reports
-       WHERE driver_id = $1 AND status <> 'rejected'
-       ORDER BY created_at DESC
+    pool.query<{ id: string; kind: string; points: number; reported_at: Date; status: "pending" | "approved" }>(
+      `SELECT r.id, p.kind, r.points, r.created_at AS reported_at, r.status
+       FROM pothole_reports r
+       JOIN potholes p ON p.id = r.pothole_id
+       WHERE r.driver_id = $1 AND r.status <> 'rejected'
+       ORDER BY r.created_at DESC
        LIMIT 20`,
       [driverId]
     ),
@@ -141,17 +150,23 @@ export async function ownPotholes(companyId: string, driverId: string) {
     monthPoints,
     monthRupees: monthPoints,
     earlierPoints: Number(earlierRows.rows[0]?.points ?? 0),
-    reports: reports.rows.map((row): OwnReport => ({
-      id: row.id,
-      points: row.points,
-      reportedAt: row.reported_at.toISOString(),
-      status: row.status,
-    })),
+    reports: reports.rows.flatMap((row): OwnReport[] => {
+      const kind = issueKind(row.kind);
+      if (!kind) return [];
+      return [{
+        id: row.id,
+        kind,
+        points: row.points,
+        reportedAt: row.reported_at.toISOString(),
+        status: row.status,
+      }];
+    }),
   };
 }
 
 const SPOT_SQL = `
-  SELECT p.id, p.latitude, p.longitude, p.created_at AS reported_at,
+  SELECT p.id, p.kind, p.latitude, p.longitude, p.created_at AS reported_at, p.team_sent_at,
+         (p.kind = 'accident' AND p.created_at <= now() - interval '3 days') AS stale,
          first_report.id AS photo_id,
          first_driver.full_name AS first_driver,
          (SELECT COUNT(*)::int FROM pothole_reports r WHERE r.pothole_id = p.id AND r.status = 'approved') AS drivers
@@ -171,46 +186,65 @@ export async function roadCondition() {
   const pool = getPool();
   const [queue, spots] = await Promise.all([
     pool.query<SpotRow>(`${SPOT_SQL} WHERE p.status = 'pending' ORDER BY p.created_at ASC`),
-    pool.query<SpotRow>(`${SPOT_SQL} WHERE p.status = 'open' ORDER BY p.created_at DESC`),
+    pool.query<SpotRow>(`${SPOT_SQL} WHERE p.status = 'open' AND ${LIVE_SQL} ORDER BY p.created_at DESC`),
   ]);
   return {
-    queue: queue.rows.map(toPending),
-    potholes: spots.rows.map(toSpot),
+    queue: queue.rows.flatMap(toPending),
+    issues: spots.rows.flatMap(toIssue),
   };
 }
 
-export async function reviewPothole(id: string, action: "approve" | "reject" | "fix") {
+export async function reviewPothole(id: string, action: "approve" | "reject" | "fix" | "team") {
   await ensureFleetSchema();
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('potholes'))`);
-    const current = await client.query<{ id: string; status: string; latitude: number; longitude: number }>(
-      `SELECT id, status, latitude, longitude FROM potholes WHERE id = $1 FOR UPDATE`,
+    const current = await client.query<{
+      id: string;
+      status: string;
+      kind: string;
+      latitude: number;
+      longitude: number;
+      created_at: Date;
+      team_sent_at: Date | null;
+    }>(
+      `SELECT id, status, kind, latitude, longitude, created_at, team_sent_at FROM potholes WHERE id = $1 FOR UPDATE`,
       [id]
     );
     const hole = current.rows[0];
-    if (!hole) throw new Error("That pothole was not found");
+    const kind = issueKind(hole?.kind);
+    if (!hole || !kind) throw new Error("That issue was not found");
     const here = { lat: hole.latitude, lng: hole.longitude };
     if (action === "fix") {
-      if (hole.status === "fixed") throw new Error("This pothole is already fixed");
-      if (hole.status !== "open") throw new Error("This pothole must be confirmed before it is fixed");
+      if (hole.status === "fixed") throw new Error("This issue is already fixed");
+      if (hole.status !== "open") throw new Error("This issue must be confirmed before it is fixed");
       await client.query(`UPDATE potholes SET status = 'fixed' WHERE id = $1`, [id]);
       await client.query("COMMIT");
       return { outcome: "fixed" as const };
     }
-    if (hole.status !== "pending") throw new Error("This pothole is already reviewed");
+    if (action === "team") {
+      if (hole.status === "fixed") throw new Error("This issue is already fixed");
+      if (hole.status !== "open") throw new Error("This issue must be confirmed before a team is sent");
+      if (hole.team_sent_at) throw new Error("The team is already sent");
+      if (kind === "accident" && accidentExpired(hole.created_at)) throw new Error("This accident is already expired");
+      await client.query(`UPDATE potholes SET team_sent_at = now() WHERE id = $1`, [id]);
+      await client.query("COMMIT");
+      return { outcome: "team" as const };
+    }
+    if (hole.status !== "pending") throw new Error("This issue is already reviewed");
     if (action === "reject") {
       await rejectHole(client, id);
       await client.query("COMMIT");
       return { outcome: "rejected" as const };
     }
-    const open = closest(await nearbyPotholes(client, here), "open");
+    const open = closestLive(await nearbyIssues(client, here, kind));
     if (open && open.id !== id) {
       await rejectHole(client, id);
       await client.query("COMMIT");
       return { outcome: "duplicate" as const };
     }
+    const late = kind === "accident" && accidentExpired(hole.created_at);
     await client.query(`UPDATE potholes SET status = 'open' WHERE id = $1`, [id]);
     await client.query(
       `UPDATE pothole_reports
@@ -218,9 +252,9 @@ export async function reviewPothole(id: string, action: "approve" | "reject" | "
        WHERE pothole_id = $1 AND status = 'pending'`,
       [id, FIRST_POINTS]
     );
-    await rejectPendingNear(client, here, id);
+    await rejectPendingNear(client, here, kind, id);
     await client.query("COMMIT");
-    return { outcome: "approved" as const };
+    return { outcome: late ? ("approved_late" as const) : ("approved" as const) };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;
@@ -247,25 +281,28 @@ export async function potholeAhead(companyId: string, driverId: string, tripId: 
   if (!next?.latitude || next.longitude == null) return { text: null, potholeId: null };
   const here = { lat: latitude, lng: longitude };
   const target = { lat: next.latitude, lng: next.longitude };
-  const holes = await getPool().query<{ id: string; latitude: number; longitude: number }>(
-    `SELECT id, latitude, longitude FROM potholes
-     WHERE status = 'open'
+  const holes = await getPool().query<{ id: string; kind: string; latitude: number; longitude: number }>(
+    `SELECT id, kind, latitude, longitude FROM potholes
+     WHERE status = 'open' AND ${LIVE_SQL}
        AND latitude BETWEEN $1 AND $2
        AND longitude BETWEEN $3 AND $4`,
     [latitude - 0.005, latitude + 0.005, longitude - 0.005, longitude + 0.005]
   );
-  let best: { id: string; meters: number } | null = null;
+  const rank: Record<IssueKind, number> = { accident: 0, water: 1, pothole: 2, other: 3 };
+  let best: { id: string; kind: IssueKind; meters: number } | null = null;
   for (const hole of holes.rows) {
+    const kind = issueKind(hole.kind);
+    if (!kind) continue;
     const spot = { lat: hole.latitude, lng: hole.longitude };
     const meters = metersBetween(here, spot);
     if (meters > WARN_METERS) continue;
     const onRoad = meters <= 80 || (metersToSegment(spot, here, target) <= 80 && aheadOf(here, target, spot));
     if (!onRoad) continue;
-    if (!best || meters < best.meters) best = { id: hole.id, meters };
+    const nearer = !best || meters < best.meters - 1 || (Math.abs(meters - best.meters) <= 1 && rank[kind] < rank[best.kind]);
+    if (nearer) best = { id: hole.id, kind, meters };
   }
   if (!best) return { text: null, potholeId: null };
-  const text = best.meters < 100 ? "Pothole here. Slow down." : `Pothole in ${Math.round(best.meters)} m. Slow down.`;
-  return { text, potholeId: best.id };
+  return { text: warnLine(best.kind, best.meters), potholeId: best.id };
 }
 
 export async function potholeImage(reportId: string, driverId: string | null) {
@@ -280,29 +317,59 @@ export async function potholeImage(reportId: string, driverId: string | null) {
   return image;
 }
 
-type Near = { id: string; status: "pending" | "open" | "fixed" | "rejected"; driverId: string; meters: number };
+type Near = {
+  id: string;
+  status: "pending" | "open" | "fixed" | "rejected";
+  kind: IssueKind;
+  driverId: string;
+  meters: number;
+  reportedAt: Date;
+};
 
-async function nearbyPotholes(client: PoolClient, here: { lat: number; lng: number }) {
-  const rows = await client.query<{ id: string; status: Near["status"]; latitude: number; longitude: number; driver_id: string }>(
-    `SELECT p.id, p.status, p.latitude, p.longitude, r.driver_id
+async function nearbyIssues(client: PoolClient, here: { lat: number; lng: number }, kind: IssueKind) {
+  const rows = await client.query<{
+    id: string;
+    status: Near["status"];
+    kind: string;
+    latitude: number;
+    longitude: number;
+    driver_id: string;
+    created_at: Date;
+  }>(
+    `SELECT p.id, p.status, p.kind, p.latitude, p.longitude, p.created_at, r.driver_id
      FROM potholes p
      JOIN pothole_reports r ON r.pothole_id = p.id
-     WHERE p.latitude BETWEEN $1 AND $2
+     WHERE p.kind = $5
+       AND p.latitude BETWEEN $1 AND $2
        AND p.longitude BETWEEN $3 AND $4
        AND r.created_at = (SELECT MIN(created_at) FROM pothole_reports WHERE pothole_id = p.id)`,
-    [here.lat - 0.001, here.lat + 0.001, here.lng - 0.001, here.lng + 0.001]
+    [here.lat - 0.001, here.lat + 0.001, here.lng - 0.001, here.lng + 0.001, kind]
   );
-  return rows.rows.map((row) => ({
-    id: row.id,
-    status: row.status,
-    driverId: row.driver_id,
-    meters: metersBetween(here, { lat: row.latitude, lng: row.longitude }),
-  }));
+  return rows.rows.flatMap((row): Near[] => {
+    const parsed = issueKind(row.kind);
+    if (!parsed) return [];
+    return [{
+      id: row.id,
+      status: row.status,
+      kind: parsed,
+      driverId: row.driver_id,
+      meters: metersBetween(here, { lat: row.latitude, lng: row.longitude }),
+      reportedAt: row.created_at,
+    }];
+  });
 }
 
-function closest(spots: Near[], status: Near["status"]) {
+function stillLive(spot: Near) {
+  return spot.status === "open" && !(spot.kind === "accident" && accidentExpired(spot.reportedAt));
+}
+
+function blocksSameDriver(spot: Near, driverId: string) {
+  return spot.driverId === driverId && spot.meters <= POTHOLE_METERS && (spot.status === "pending" || stillLive(spot));
+}
+
+function closestLive(spots: Near[]) {
   return spots
-    .filter((spot) => spot.status === status && spot.meters <= POTHOLE_METERS)
+    .filter((spot) => stillLive(spot) && spot.meters <= POTHOLE_METERS)
     .sort((left, right) => left.meters - right.meters)[0] ?? null;
 }
 
@@ -314,8 +381,8 @@ async function rejectHole(client: PoolClient, id: string) {
   );
 }
 
-async function rejectPendingNear(client: PoolClient, here: { lat: number; lng: number }, keepId: string) {
-  const spots = await nearbyPotholes(client, here);
+async function rejectPendingNear(client: PoolClient, here: { lat: number; lng: number }, kind: IssueKind, keepId: string) {
+  const spots = await nearbyIssues(client, here, kind);
   for (const spot of spots) {
     if (spot.status === "pending" && spot.id !== keepId && spot.meters <= POTHOLE_METERS) {
       await rejectHole(client, spot.id);
@@ -325,35 +392,46 @@ async function rejectPendingNear(client: PoolClient, here: { lat: number; lng: n
 
 type SpotRow = {
   id: string;
+  kind: string;
   latitude: number;
   longitude: number;
   reported_at: Date;
+  team_sent_at: Date | null;
+  stale: boolean;
   photo_id: string;
   first_driver: string;
   drivers: number;
 };
 
-function toSpot(row: SpotRow): PotholeSpot {
-  return {
+function toIssue(row: SpotRow): RoadIssue[] {
+  const kind = issueKind(row.kind);
+  if (!kind) return [];
+  return [{
     id: row.id,
+    kind,
     latitude: row.latitude,
     longitude: row.longitude,
     reportedAt: row.reported_at.toISOString(),
     photoId: row.photo_id,
     firstDriver: row.first_driver,
     drivers: row.drivers,
-  };
+    teamSentAt: row.team_sent_at ? row.team_sent_at.toISOString() : null,
+  }];
 }
 
-function toPending(row: SpotRow): PendingPothole {
-  return {
+function toPending(row: SpotRow): PendingIssue[] {
+  const kind = issueKind(row.kind);
+  if (!kind) return [];
+  return [{
     id: row.id,
+    kind,
     latitude: row.latitude,
     longitude: row.longitude,
     reportedAt: row.reported_at.toISOString(),
     photoId: row.photo_id,
     driverName: row.first_driver,
-  };
+    stale: row.stale,
+  }];
 }
 
 function metersToSegment(

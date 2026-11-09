@@ -14,8 +14,8 @@ export async function POST(req: Request, context: Context) {
     }
     const body = (await req.json().catch(() => null)) as { action?: string } | null;
     const action = body?.action;
-    if (action !== "approve" && action !== "reject" && action !== "fix") {
-      return NextResponse.json({ error: "Choose approve, reject, or fixed" }, { status: 400 });
+    if (action !== "approve" && action !== "reject" && action !== "fix" && action !== "team") {
+      return NextResponse.json({ error: "Choose approve, reject, fixed, or team" }, { status: 400 });
     }
     const result = await reviewPothole(id, action);
     return NextResponse.json({ ok: true, ...result });
