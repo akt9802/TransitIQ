@@ -162,16 +162,53 @@ export async function ensureFleetSchema(): Promise<void> {
   `);
 
   await pool.query(`
+    ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS tracked_km numeric(12,3) NOT NULL DEFAULT 0
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS service_schedules (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      vehicle_id uuid NOT NULL REFERENCES vehicles(id),
+      name text NOT NULL,
+      every_days integer,
+      every_km numeric(12,3),
+      next_due_on date,
+      next_due_km numeric(12,3),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      deleted_at timestamptz,
+      CHECK (every_days IS NULL OR every_days > 0),
+      CHECK (every_km IS NULL OR every_km > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_service_schedules_vehicle ON service_schedules(vehicle_id);
+    ALTER TABLE service_schedules ADD COLUMN IF NOT EXISTS skip_trip_id uuid;
+
+    CREATE TABLE IF NOT EXISTS service_done (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id uuid NOT NULL REFERENCES companies(id),
+      schedule_id uuid NOT NULL REFERENCES service_schedules(id),
+      vehicle_id uuid NOT NULL REFERENCES vehicles(id),
+      name text NOT NULL,
+      done_on date NOT NULL,
+      odometer_km numeric(12,3),
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS paper_reminder_sends (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id uuid NOT NULL REFERENCES companies(id),
       subject_key text NOT NULL,
       expires_on date NOT NULL,
-      slot text NOT NULL CHECK (slot IN ('d30', 'd15', 'd7', 'morning', 'afternoon', 'evening')),
+      slot text NOT NULL CHECK (slot IN ('d30', 'd15', 'd7', 'morning', 'afternoon', 'evening', 'km1000', 'km500', 'km200')),
       sent_on date NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE (subject_key, expires_on, slot, sent_on)
     );
+    ALTER TABLE paper_reminder_sends DROP CONSTRAINT IF EXISTS paper_reminder_sends_slot_check;
+    ALTER TABLE paper_reminder_sends ADD CONSTRAINT paper_reminder_sends_slot_check
+      CHECK (slot IN ('d30', 'd15', 'd7', 'morning', 'afternoon', 'evening', 'km1000', 'km500', 'km200'));
   `);
 
   fleetReady = true;

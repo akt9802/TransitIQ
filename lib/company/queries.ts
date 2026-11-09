@@ -5,6 +5,7 @@ import {
   listDrivers,
   listVehiclePapers,
 } from "@/lib/company/records";
+import { listServices } from "@/lib/company/services";
 import { listCustomers, listTrips } from "@/lib/company/trips";
 import type {
   CompanyInput,
@@ -30,6 +31,7 @@ type FleetLists = Pick<
   | "apiKeys"
   | "customers"
   | "trips"
+  | "services"
 >;
 
 type OwnerRow = {
@@ -102,6 +104,7 @@ export async function getWorkspace(userId: string): Promise<Workspace | null> {
     apiKeys: [],
     customers: [],
     trips: [],
+    services: [],
   };
   let fleet = emptyFleet;
   if (owner.company_id) {
@@ -163,6 +166,7 @@ export async function getWorkspace(userId: string): Promise<Workspace | null> {
       trips: owner.role_key === "driver" && !owner.driver_id
         ? []
         : await listTrips(companyId, owner.role_key === "driver" ? owner.driver_id : null),
+      services: await listServices(companyId),
     };
   }
 
@@ -216,6 +220,7 @@ type VehicleRow = {
   contract_end: Date | string | null;
   status: string;
   odometer_km: string | number | null;
+  tracked_km: string | number | null;
   tank_capacity_l: string | number | null;
   branch_id: string | null;
   branch_name: string | null;
@@ -259,6 +264,7 @@ export function toVehicle(row: VehicleRow): VehicleRecord {
     contractEnd: asDay(row.contract_end),
     status: row.status,
     odometerKm: asNumber(row.odometer_km),
+    trackedKm: asNumber(row.tracked_km) ?? 0,
     tankCapacityL: asNumber(row.tank_capacity_l),
     branchId: row.branch_id,
     branchName: row.branch_name,
@@ -272,7 +278,7 @@ export async function listVehicles(companyId: string): Promise<VehicleRecord[]> 
   const { rows } = await pool.query<VehicleRow>(
     `SELECT v.id, v.registration_number, v.make, v.model, v.year, v.chassis_number, v.engine_number,
             v.truck_type, v.load_capacity_kg, v.axle_count, v.length_m, v.width_m, v.height_m,
-            v.ownership, v.contract_start, v.contract_end, v.status, v.odometer_km, v.tank_capacity_l,
+            v.ownership, v.contract_start, v.contract_end, v.status, v.odometer_km, v.tracked_km, v.tank_capacity_l,
             v.branch_id, b.name AS branch_name, v.vendor_id, vn.name AS vendor_name
      FROM vehicles v
      LEFT JOIN branches b ON b.id = v.branch_id AND b.deleted_at IS NULL

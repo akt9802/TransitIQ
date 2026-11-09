@@ -17,6 +17,8 @@ import {
 import { loadGoogleMaps } from "@/components/maps/loadGoogleMaps";
 import { PlaceSearch, TripMap } from "@/components/maps/TripPlaces";
 import { fieldClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
+import { indiaToday } from "@/lib/company/paper-rules";
+import { currentKm, dueServices, tripServiceNote, type ServiceView } from "@/lib/company/service-rules";
 import {
   LIVE_TRIP_STATUSES,
   TRIP_STATUSES,
@@ -220,6 +222,7 @@ export default function TripsSection({
   customers,
   drivers,
   vehicles,
+  services,
   canWrite,
   ownDriverId,
 }: {
@@ -227,6 +230,7 @@ export default function TripsSection({
   customers: CustomerRecord[];
   drivers: DriverRecord[];
   vehicles: VehicleRecord[];
+  services: ServiceView[];
   canWrite: boolean;
   ownDriverId: string | null;
 }) {
@@ -408,6 +412,14 @@ export default function TripsSection({
     if (action === "started" && saved && (saved as { emailError?: string | null }).emailError) {
       setError("The trip started. The tracking email could not be sent. Use Send again on the trip.");
     }
+  }
+
+  function deliverFirst(trip: TripRecord) {
+    return submit(`/api/company/trips/${trip.id}/deliver-first`, "POST");
+  }
+
+  function serviceFirst(trip: TripRecord) {
+    return submit(`/api/company/trips/${trip.id}/deliver-first`, "DELETE");
   }
 
   return (
@@ -629,7 +641,11 @@ export default function TripsSection({
         canWrite={canWrite}
         ownDriverId={ownDriverId}
         saving={saving}
+        services={services}
+        vehicles={vehicles}
         onEdit={edit}
+        onDeliver={deliverFirst}
+        onServiceFirst={serviceFirst}
         onStatus={(trip, status) => progress(trip, status)}
       />
       <TripGroup
@@ -641,7 +657,11 @@ export default function TripsSection({
         canWrite={canWrite}
         ownDriverId={ownDriverId}
         saving={saving}
+        services={services}
+        vehicles={vehicles}
         onEdit={edit}
+        onDeliver={deliverFirst}
+        onServiceFirst={serviceFirst}
         onStatus={(trip, status) => progress(trip, status)}
       />
       <TripGroup
@@ -794,6 +814,55 @@ function TripCostBlock({ trip, sheet }: { trip: TripRecord; sheet: boolean }) {
   );
 }
 
+function serviceLabel(names: string[]) {
+  if (names.length <= 1) return names[0] ?? "Service";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+function ServiceNote({
+  trip,
+  services,
+  vehicles,
+  legs,
+  canWrite,
+}: {
+  trip: TripRecord;
+  services?: ServiceView[];
+  vehicles?: VehicleRecord[];
+  legs: number[] | null;
+  canWrite: boolean;
+}) {
+  const vehicle = vehicles?.find((item) => item.id === trip.vehicleId);
+  const reading = currentKm(vehicle?.odometerKm ?? null, vehicle?.trackedKm ?? 0);
+  const today = indiaToday();
+  const mine = (services ?? []).filter((service) => service.vehicleId === trip.vehicleId);
+  const due = dueServices(mine, reading, today);
+  const queued = trip.status === "assigned" || trip.status === "created";
+  if (due.length > 0) {
+    const names = serviceLabel(due.map((service) => service.name));
+    const verb = due.length > 1 ? "are" : "is";
+    const allowed = due.every((service) => service.skipTripId === trip.id);
+    const text = !queued
+      ? `${names} ${verb} due. This trip stays on the road.`
+      : allowed
+        ? `${names} ${verb} due. This trip goes first.`
+        : canWrite
+          ? `${names} ${verb} due.`
+          : `${names} ${verb} due. The owner sends this trip first.`;
+    return <p className="mt-2 text-sm font-extrabold text-ink">{text}</p>;
+  }
+  const note = tripServiceNote(
+    mine,
+    reading,
+    today,
+    legs?.map((meters) => meters / 1000) ?? null,
+    trip.stops[0]?.scheduledAt ?? null,
+    trip.stops[trip.stops.length - 1]?.scheduledAt ?? null
+  );
+  if (!note) return null;
+  return <p className="mt-2 text-sm font-extrabold text-ink">{note}</p>;
+}
+
 function TripCard({
   trip,
   queue,
@@ -802,8 +871,12 @@ function TripCard({
   ownDriverId,
   saving,
   past,
+  services,
+  vehicles,
   onEdit,
   onCopy,
+  onDeliver,
+  onServiceFirst,
   onStatus,
 }: {
   trip: TripRecord;
@@ -813,8 +886,12 @@ function TripCard({
   ownDriverId: string | null;
   saving: boolean;
   past?: boolean;
+  services?: ServiceView[];
+  vehicles?: VehicleRecord[];
   onEdit: (trip: TripRecord) => void;
   onCopy?: (trip: TripRecord) => void;
+  onDeliver?: (trip: TripRecord) => void;
+  onServiceFirst?: (trip: TripRecord) => void;
   onStatus: (trip: TripRecord, status: string) => void;
 }) {
   const [pending, setPending] = useState<{ message: string; run: () => void } | null>(null);
@@ -828,6 +905,14 @@ function TripCard({
   const pendingStop = trip.stops.find((stop) => !stop.arrivedAt);
   const reachingMiddle = trip.status === "in_transit" && pendingStop && lastStop && pendingStop.id !== lastStop.id;
   const canMove = canWrite || mine;
+  const queued = trip.status === "assigned" || trip.status === "created";
+  const truckServices = (services ?? []).filter((service) => service.vehicleId === trip.vehicleId);
+  const due = dueServices(
+    truckServices,
+    currentKm(vehicles?.find((item) => item.id === trip.vehicleId)?.odometerKm ?? null, vehicles?.find((item) => item.id === trip.vehicleId)?.trackedKm ?? 0),
+    indiaToday()
+  );
+  const serviceAllowed = due.length > 0 && due.every((service) => service.skipTripId === trip.id);
   const badge = place >= 0 ? (place === 0 ? "Next" : `Queue ${place + 1}`) : statusLabel(trip.status);
   const facts = [
     trip.driverName ?? "No driver",
@@ -845,6 +930,7 @@ function TripCard({
         <div className="min-w-0">
           <h3 className={past ? "text-2xl font-extrabold text-ink" : "text-lg font-extrabold text-ink"}>{trip.customerName}</h3>
           <p className="mt-1 text-sm text-muted">{facts.join(" · ")}</p>
+          {past ? null : <ServiceNote trip={trip} services={services} vehicles={vehicles} legs={legs} canWrite={canWrite} />}
         </div>
         <span className="rounded-md border-2 border-ink px-2 py-1 text-xs font-extrabold uppercase tracking-wider text-ink">
           {badge}
@@ -887,8 +973,34 @@ function TripCard({
       <ProofStrip proofs={trip.proofs ?? []} />
       {canMove || (canWrite && onCopy) ? (
         <div className="mt-4 flex flex-wrap gap-2">
-          {canWrite && (trip.status === "assigned" || trip.status === "created") ? (
+          {canWrite && queued ? (
             <button type="button" className={quietBtn} disabled={saving} onClick={() => onEdit(trip)}>Edit</button>
+          ) : null}
+          {canWrite && queued && due.length > 0 && !serviceAllowed && onDeliver ? (
+            <button
+              type="button"
+              className={quietBtn}
+              disabled={saving}
+              onClick={() => setPending({
+                message: "Send this trip first? The service stays due, and the next trip waits until it is done.",
+                run: () => onDeliver(trip),
+              })}
+            >
+              Deliver first
+            </button>
+          ) : null}
+          {canWrite && queued && serviceAllowed && onServiceFirst ? (
+            <button
+              type="button"
+              className={quietBtn}
+              disabled={saving}
+              onClick={() => setPending({
+                message: "Put the service ahead of this trip again?",
+                run: () => onServiceFirst(trip),
+              })}
+            >
+              Service first
+            </button>
           ) : null}
           {canWrite && onCopy ? (
             <button type="button" className={quietBtn} disabled={saving} onClick={() => onCopy(trip)}>
@@ -973,8 +1085,12 @@ function TripGroup({
   canWrite,
   ownDriverId,
   saving,
+  services,
+  vehicles,
   onEdit,
   onCopy,
+  onDeliver,
+  onServiceFirst,
   onStatus,
 }: {
   title: string;
@@ -987,8 +1103,12 @@ function TripGroup({
   canWrite: boolean;
   ownDriverId: string | null;
   saving: boolean;
+  services?: ServiceView[];
+  vehicles?: VehicleRecord[];
   onEdit: (trip: TripRecord) => void;
   onCopy?: (trip: TripRecord) => void;
+  onDeliver?: (trip: TripRecord) => void;
+  onServiceFirst?: (trip: TripRecord) => void;
   onStatus: (trip: TripRecord, status: string) => void;
 }) {
   return (
@@ -1007,7 +1127,11 @@ function TripGroup({
               ownDriverId={ownDriverId}
               saving={saving}
               past={emphasis}
+              services={services}
+              vehicles={vehicles}
               onEdit={onEdit}
+              onDeliver={onDeliver}
+              onServiceFirst={onServiceFirst}
               onCopy={onCopy}
               onStatus={onStatus}
             />

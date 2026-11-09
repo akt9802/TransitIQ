@@ -164,7 +164,7 @@ export default function OwnerDashboard({
       ) : null}
 
       <div className="min-w-0 flex-1">
-      {hasCompany && workspace.owner.roleKey !== "driver" ? <PaperReminders /> : null}
+      {hasCompany ? <PaperReminders /> : null}
       {!hasCompany || active === "company" ? (
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
@@ -243,6 +243,7 @@ export default function OwnerDashboard({
           vehicleLimit={workspace.company.vehicleLimit}
           canWrite={workspace.permissions.includes("vehicles.write")}
           papers={workspace.vehiclePapers}
+          services={workspace.services}
         />
       ) : null}
 
@@ -270,6 +271,7 @@ export default function OwnerDashboard({
           customers={workspace.customers}
           drivers={workspace.drivers}
           vehicles={workspace.vehicles}
+          services={workspace.services}
           canWrite={workspace.permissions.includes("trips.write")}
           ownDriverId={workspace.owner.roleKey === "driver" ? workspace.owner.driverId : null}
         />

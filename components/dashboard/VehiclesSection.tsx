@@ -3,7 +3,10 @@
 import { cloneElement, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { Alert } from "@/components/dashboard/frame";
+import VehicleServices from "@/components/dashboard/VehicleServices";
 import { indiaToday, vehiclePaperLine } from "@/lib/company/paper-rules";
+import { currentKm, serviceSummary } from "@/lib/company/service-rules";
+import type { ServiceView } from "@/lib/company/service-rules";
 import {
   TRUCK_TYPES,
   VEHICLE_DOC_KINDS,
@@ -19,6 +22,7 @@ type Props = {
   vehicleLimit: number;
   canWrite: boolean;
   papers: PaperRecord[];
+  services: ServiceView[];
 };
 
 type PaperDraft = { documentNumber: string; expiresOn: string };
@@ -158,7 +162,7 @@ function fieldForError(message: string): keyof Draft | null {
   return ERROR_FIELDS.find(([prefix]) => message.startsWith(prefix))?.[1] ?? null;
 }
 
-export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, papers }: Props) {
+export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, papers, services }: Props) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -380,6 +384,15 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
           </div>
         </form>
       ) : null}
+      {draft?.id ? (
+        <VehicleServices
+          vehicleId={draft.id}
+          services={services}
+          odometerKm={vehicles.find((vehicle) => vehicle.id === draft.id)?.odometerKm ?? null}
+          trackedKm={vehicles.find((vehicle) => vehicle.id === draft.id)?.trackedKm ?? 0}
+          canWrite={canWrite}
+        />
+      ) : null}
       {vehicles.length === 0 ? (
         <p className="mt-4 text-sm text-ink-soft">No trucks yet.</p>
       ) : (
@@ -399,7 +412,14 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
             <tbody>
               {vehicles.map((vehicle) => (
                 <tr key={vehicle.id} className="border-b border-ink/15">
-                  <td className="py-3 pr-4 text-ink">{vehicle.registrationNumber}</td>
+                  <td className="py-3 pr-4 text-ink">
+                    {vehicle.registrationNumber}
+                    {serviceSummary(services.filter((service) => service.vehicleId === vehicle.id), currentKm(vehicle.odometerKm, vehicle.trackedKm), indiaToday()) ? (
+                      <span className="mt-1 block text-muted">
+                        {serviceSummary(services.filter((service) => service.vehicleId === vehicle.id), currentKm(vehicle.odometerKm, vehicle.trackedKm), indiaToday())}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="py-3 pr-4 text-ink">{labelFor(TRUCK_TYPES, vehicle.truckType)}</td>
                   <td className="py-3 pr-4 text-ink">
                     {[vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Not added"}

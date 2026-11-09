@@ -1,4 +1,7 @@
+import type { ServiceView } from "@/lib/company/service-rules";
+
 export type Language = "en" | "hi";
+export type { ServiceView };
 
 export type OwnerProfile = {
   id: string;
@@ -94,6 +97,7 @@ export type VehicleRecord = {
   contractEnd: string | null;
   status: string;
   odometerKm: number | null;
+  trackedKm: number;
   tankCapacityL: number | null;
   branchId: string | null;
   branchName: string | null;
@@ -450,6 +454,7 @@ export type Workspace = {
   notifications: NotificationPreference[];
   customers: CustomerRecord[];
   trips: TripRecord[];
+  services: ServiceView[];
   permissions: string[];
 };
 

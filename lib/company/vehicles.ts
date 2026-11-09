@@ -142,6 +142,7 @@ export async function updateVehicle(
          contract_end = $17,
          status = $18,
          odometer_km = $19,
+         tracked_km = CASE WHEN odometer_km IS DISTINCT FROM $19::numeric THEN 0 ELSE tracked_km END,
          tank_capacity_l = $20,
          branch_id = $21,
          vendor_id = $22,

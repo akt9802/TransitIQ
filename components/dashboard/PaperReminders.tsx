@@ -48,7 +48,7 @@ export default function PaperReminders() {
   return (
     <section className="mb-6 border-2 border-ink bg-paper p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-extrabold text-ink">Papers</h2>
+        <h2 className="text-lg font-extrabold text-ink">Reminders</h2>
         {permission === "default" ? (
           <button
             type="button"
@@ -66,8 +66,8 @@ export default function PaperReminders() {
       </div>
       <p className="mt-2 text-sm text-muted">
         {urgent
-          ? "A paper inside 7 days, or already expired, reminds you in the morning, afternoon, and evening until you change its date."
-          : "A paper reminds you 30, 15, and 7 days before the date."}
+          ? "A due paper or service reminds you in the morning, afternoon, and evening until it is updated."
+          : "Papers warn at 30, 15, and 7 days. A service also warns at 1,000, 500, and 200 km."}
         {permission === "denied" ? " Browser reminders are off, so this list is the notice." : ""}
       </p>
       <ul className="mt-3 space-y-2">

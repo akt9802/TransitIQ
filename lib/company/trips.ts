@@ -6,6 +6,7 @@ import { metersBetween, pickupAwayMessage, STOP_RANGE_METERS, stopAwayMessage } 
 import { proofsForTrips } from "@/lib/company/proofs";
 import { costsForTrips, emptyTripCost } from "@/lib/company/trip-cost";
 import { assertTripPapers } from "@/lib/company/papers";
+import { assertVehicleServices, releaseTripService } from "@/lib/company/services";
 import type { CustomerRecord, TripInput, TripRecord, TripStopInput, TripStopRecord } from "@/lib/company/types";
 import { LIVE_TRIP_STATUSES } from "@/lib/company/types";
 
@@ -319,8 +320,8 @@ export async function createTrip(companyId: string, input: TripInput) {
 
 export async function updateTrip(companyId: string, tripId: string, input: TripInput) {
   await withTrip(async (client) => {
-    const current = await client.query<{ status: string; order_id: string | null; email: string | null }>(
-      `SELECT t.status, t.order_id, c.email
+    const current = await client.query<{ status: string; order_id: string | null; email: string | null; vehicle_id: string | null }>(
+      `SELECT t.status, t.order_id, c.email, t.vehicle_id
        FROM trips t
        LEFT JOIN customers c ON c.id = t.customer_id
        WHERE t.id = $1 AND t.company_id = $2 AND t.deleted_at IS NULL
@@ -334,6 +335,9 @@ export async function updateTrip(companyId: string, tripId: string, input: TripI
     }
     const customerId = await resolveCustomer(client, companyId, input);
     await assertAssignable(client, companyId, input, tripId);
+    if (trip.vehicle_id && trip.vehicle_id !== input.vehicleId) {
+      await releaseTripService(client, companyId, tripId);
+    }
     if (trip.order_id) {
       await client.query(
         `UPDATE orders
@@ -459,6 +463,7 @@ export async function changeTripStatus(
         [companyId, trip.vehicle_id, tripId]
       );
       if ((busyTruck.rowCount ?? 0) > 0) throw new Error("This truck already has a live trip");
+      await assertVehicleServices(client, companyId, trip.vehicle_id, tripId);
       await client.query(
         `UPDATE trips SET status = 'started', started_at = COALESCE(started_at, now()), updated_at = now()
          WHERE id = $1`,
@@ -559,6 +564,7 @@ export async function changeTripStatus(
         );
       }
       await releaseVehicle(client, companyId, trip.vehicle_id);
+      await releaseTripService(client, companyId, tripId);
       return;
     }
 
@@ -584,6 +590,7 @@ export async function changeTripStatus(
         );
       }
       await releaseVehicle(client, companyId, trip.vehicle_id);
+      await releaseTripService(client, companyId, tripId);
       return;
     }
 

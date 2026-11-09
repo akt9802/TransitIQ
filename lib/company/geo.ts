@@ -13,6 +13,14 @@ export function metersBetween(
   return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
+/** Kilometres between two accepted points, using the same skip rules as trip cost. */
+export function countedKilometres(
+  previous: { latitude: number; longitude: number; at: number },
+  next: { latitude: number; longitude: number; at: number }
+) {
+  return trackedKilometres([previous, next]);
+}
+
 export function trackedKilometres(points: { latitude: number; longitude: number; at: number }[]) {
   let meters = 0;
   for (let index = 1; index < points.length; index += 1) {

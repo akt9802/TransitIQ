@@ -1,5 +1,5 @@
 import { getPool } from "@/lib/db";
-import { trackedKilometres } from "@/lib/company/geo";
+import { countedKilometres, trackedKilometres } from "@/lib/company/geo";
 import { ensureFleetSchema } from "@/lib/company/fleet-schema";
 import { ensureOperationsSchema } from "@/lib/company/operations-schema";
 import {
@@ -183,6 +183,19 @@ export async function recordLocation(
       segment?.moving ?? false,
     ]
   );
+  if (row.vehicle_id && last) {
+    const gained = countedKilometres(
+      { latitude: Number(last.latitude), longitude: Number(last.longitude), at: last.recorded_at.getTime() },
+      { latitude, longitude, at: now }
+    );
+    if (gained > 0) {
+      await pool.query(
+        `UPDATE vehicles SET tracked_km = tracked_km + $3, updated_at = now()
+         WHERE id = $1 AND company_id = $2 AND odometer_km IS NOT NULL`,
+        [row.vehicle_id, companyId, gained]
+      );
+    }
+  }
   await pool.query(
     `DELETE FROM location_points
      WHERE company_id = $1 AND recorded_at < now() - ($2 || ' days')::interval`,
