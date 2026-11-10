@@ -2,8 +2,13 @@ import { Pool, type PoolConfig, type QueryResultRow } from "pg";
 
 /**
  * Server-only Postgres pool. Set one of:
- * - `DATABASE_URL` — full URI (best: paste Supabase **session pooler** URI from Connect), or
+ * - `DATABASE_URL` — full URI from Supabase → Connect, or
  * - `SUPABASE_DB_PASSWORD` + `NEXT_PUBLIC_SUPABASE_URL` (+ `SUPABASE_DB_REGION` and optional `SUPABASE_POOLER_HOST`)
+ *
+ * Local `next dev` uses the session pooler (port 5432) and keeps only a few connections.
+ * Vercel sets `VERCEL` and uses the transaction pooler (port 6543) with one connection per
+ * instance. Session mode on the free project allows 15 clients total, so a pool of 10 on
+ * every serverless instance hits `EMAXCONNSESSION`.
  *
  * Do not guess the pooler host. `aws-0-<region>` is not a safe default (cluster index + region
  * must match Connect). Wrong region → FATAL tenant/user not found.
@@ -24,14 +29,18 @@ function parseSupabaseProjectRef(supabaseUrl: string): string {
 
 /**
  * Direct host `db.<ref>.supabase.co` often has **IPv6-only** DNS (AAAA). Node/pg on many networks
- * resolves A first → ENOTFOUND. The **shared pooler** is IPv4. Session mode (5432) is used here
- * because this Next.js process is long-lived and node-pg uses parameterized queries.
+ * resolves A first → ENOTFOUND. The **shared pooler** is IPv4.
+ * Transaction mode (6543) is required on Vercel. Session mode (5432) is for the local process.
  */
+function poolerPort(): 5432 | 6543 {
+  return process.env.VERCEL ? 6543 : 5432;
+}
+
 function buildSupabasePoolerUrl(
   projectRef: string,
   password: string,
   region: string,
-  port: 5432 | 6543 = 5432
+  port: 5432 | 6543 = poolerPort()
 ): string {
   const user = encodeURIComponent(`postgres.${projectRef}`);
   const pass = encodeURIComponent(password);
@@ -52,16 +61,22 @@ function normalizeSupabaseDirectUrl(url: string): string {
     const password =
       u.password !== "" ? decodeURIComponent(u.password) : process.env.SUPABASE_DB_PASSWORD ?? "";
     if (!password) return url;
-    return buildSupabasePoolerUrl(ref, password, region, 5432);
+    return buildSupabasePoolerUrl(ref, password, region, poolerPort());
   } catch {
     return url;
   }
 }
 
+/** A pasted session-pooler URI stays on 5432 unless this rewrites it for Vercel. */
+function useTransactionPooler(url: string): string {
+  if (!process.env.VERCEL) return url;
+  return url.replace(/(\.pooler\.supabase\.com):5432(?=\/|[?#]|$)/, "$1:6543");
+}
+
 function resolveConnectionString(): string {
   const direct = process.env.DATABASE_URL?.trim();
   if (direct) {
-    return normalizeSupabaseDirectUrl(direct);
+    return useTransactionPooler(normalizeSupabaseDirectUrl(direct));
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -72,7 +87,7 @@ function resolveConnectionString(): string {
     try {
       const projectRef = parseSupabaseProjectRef(supabaseUrl);
       if (region) {
-        return buildSupabasePoolerUrl(projectRef, dbPassword, region, 5432);
+        return buildSupabasePoolerUrl(projectRef, dbPassword, region, poolerPort());
       }
       const user = encodeURIComponent("postgres");
       const pass = encodeURIComponent(dbPassword);
@@ -96,12 +111,14 @@ function resolveConnectionString(): string {
 
 function createPool(): Pool {
   const connectionString = resolveConnectionString();
+  const serverless = Boolean(process.env.VERCEL);
 
   const config: PoolConfig = {
     connectionString,
-    max: 10,
-    idleTimeoutMillis: 30_000,
+    max: serverless ? 1 : 3,
+    idleTimeoutMillis: serverless ? 5_000 : 20_000,
     connectionTimeoutMillis: 15_000,
+    allowExitOnIdle: true,
     ssl:
       connectionString.includes("supabase.co") ||
       connectionString.includes("pooler.supabase.com") ||
