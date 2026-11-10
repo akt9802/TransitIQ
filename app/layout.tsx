@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Chivo_Mono } from "next/font/google";
 import SiteHeader from "@/components/layout/SiteHeader";
 import { ensureAuthSchema } from "@/lib/auth/schema";
@@ -16,6 +16,18 @@ export const metadata: Metadata = {
   title: "TransitIQ — Fleet control meets road safety",
   description:
     "Live tracking, hazard alerts and smart routing for Indian trucking fleets. Free for up to 3 trucks.",
+  applicationName: "TransitIQ",
+  appleWebApp: {
+    capable: true,
+    title: "TransitIQ",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2a5cda",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

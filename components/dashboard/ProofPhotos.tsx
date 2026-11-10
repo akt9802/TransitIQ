@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
+import { CameraFrame } from "@/components/dashboard/CameraFrame";
 import { PhotoView } from "@/components/PhotoView";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/Modal";
@@ -58,7 +59,7 @@ export function ProofStrip({ proofs }: { proofs: TripProof[] }) {
 
 export function ProofCapture({ tripId, kind, proofs }: { tripId: string; kind: "pickup" | "delivery"; proofs: TripProof[] }) {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [camera, setCamera] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const photos = proofs.filter((photo) => photo.kind === kind);
@@ -89,7 +90,6 @@ export function ProofCapture({ tripId, kind, proofs }: { tripId: string; kind: "
       setError(err instanceof Error ? err.message : "Could not save the photo");
     } finally {
       setSaving(false);
-      if (inputRef.current) inputRef.current.value = "";
     }
   }
 
@@ -119,19 +119,20 @@ export function ProofCapture({ tripId, kind, proofs }: { tripId: string; kind: "
         </ul>
       ) : null}
       {photos.length < MAX_PHOTOS ? (
-        <>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="sr-only"
-            onChange={(event) => void onFile(event.target.files?.[0])}
+        camera ? (
+          <CameraFrame
+            busy={saving}
+            onClose={() => setCamera(false)}
+            onShot={(file) => {
+              setCamera(false);
+              void onFile(file);
+            }}
           />
-          <button type="button" className={`${primaryBtn} mt-3`} disabled={saving} onClick={() => inputRef.current?.click()}>
+        ) : (
+          <button type="button" className={`${primaryBtn} mt-3`} disabled={saving} onClick={() => setCamera(true)}>
             {saving ? "Saving photo…" : "Take photo"}
           </button>
-        </>
+        )
       ) : null}
       {error ? <Modal message={error} onConfirm={() => setError(null)} onCancel={() => setError(null)} /> : null}
     </div>

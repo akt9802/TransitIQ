@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PhotoView } from "@/components/PhotoView";
 import { Alert } from "@/components/dashboard/frame";
+import { CameraFrame } from "@/components/dashboard/CameraFrame";
 import { readHere } from "@/components/dashboard/photo";
 import { fieldClass, labelClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
 import { loadGoogleMaps } from "@/components/maps/loadGoogleMaps";
@@ -65,8 +66,6 @@ function IssueMap({ spots }: { spots: RoadIssue[] }) {
 }
 
 export default function RoadSection({ mine, linked }: { mine: boolean; linked: boolean }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const [camera, setCamera] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -81,17 +80,6 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
 
   const waiting = useMemo(() => queue.filter((spot) => spot.kind === queueKind), [queue, queueKind]);
   const open = useMemo(() => issues.filter((spot) => spot.kind === queueKind), [issues, queueKind]);
-
-  function stopCamera() {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    if (videoRef.current) videoRef.current.srcObject = null;
-    setCamera(false);
-  }
-
-  useEffect(() => () => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-  }, []);
 
   async function load() {
     const response = await fetch("/api/company/potholes");
@@ -159,54 +147,19 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
       setError("Choose the kind of issue");
       return;
     }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError("This browser has no camera. Open the page on the phone.");
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: "environment" } },
-      });
-      streamRef.current = stream;
-      setCamera(true);
-      window.setTimeout(() => {
-        if (!videoRef.current) return;
-        videoRef.current.srcObject = stream;
-        void videoRef.current.play();
-      }, 0);
-    } catch {
-      setError("Allow the camera, then try again.");
-    }
+    setCamera(true);
   }
 
-  async function takePhoto() {
-    const video = videoRef.current;
+  async function takePhoto(file: File) {
     if (!kind) {
       setError("Choose the kind of issue");
-      return;
-    }
-    if (!video || video.videoWidth === 0) {
-      setError("The camera is not ready.");
       return;
     }
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const longest = Math.max(video.videoWidth, video.videoHeight);
-      const scale = Math.min(1, 1600 / longest);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("Photo is not valid");
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const [file, here] = await Promise.all([
-        new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.72)),
-        readHere(),
-      ]);
-      if (!file) throw new Error("Photo is not valid");
+      const here = await readHere();
       if (!here) throw new Error("Location is required");
       const body = new FormData();
       body.set("kind", kind);
@@ -216,7 +169,7 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
       const response = await fetch("/api/company/potholes", { method: "POST", body });
       const payload = (await response.json()) as { error?: string; state?: string };
       if (!response.ok) throw new Error(payload.error ?? "The issue could not be sent");
-      stopCamera();
+      setCamera(false);
       setNotice(payload.state === "repeat"
         ? "3 points. This issue is already confirmed."
         : "Sent. The 12 points come after the road manager confirms the photo.");
@@ -253,15 +206,7 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
               </select>
             </label>
             {camera ? (
-              <>
-                <video ref={videoRef} className="aspect-[3/4] w-full border-2 border-ink bg-ink object-cover" playsInline muted autoPlay />
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className={primaryBtn} disabled={busy} onClick={() => void takePhoto()}>
-                    {busy ? "Sending" : "Take photo"}
-                  </button>
-                  <button type="button" className={quietBtn} disabled={busy} onClick={stopCamera}>Close</button>
-                </div>
-              </>
+              <CameraFrame busy={busy} onClose={() => setCamera(false)} onShot={(file) => void takePhoto(file)} />
             ) : (
               <button type="button" className={primaryBtn} onClick={() => void openCamera()}>Open camera</button>
             )}

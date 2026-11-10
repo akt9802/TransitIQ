@@ -5,6 +5,7 @@ import { PhotoView } from "@/components/PhotoView";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { jpegPhoto, readHere } from "@/components/dashboard/photo";
 import { Alert } from "@/components/dashboard/frame";
+import { CameraFrame } from "@/components/dashboard/CameraFrame";
 import { fieldClass, labelClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
 import type { VehicleRecord } from "@/lib/company/types";
 
@@ -511,23 +512,43 @@ function PhotoPick({
   fileName: string | null;
   onFile: (name: string | null) => void;
 }) {
+  const [camera, setCamera] = useState(false);
+
+  function keep(file: File) {
+    const input = inputRef.current;
+    if (!input) return;
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    onFile(file.name);
+    setCamera(false);
+  }
+
   return (
     <div>
       <span className={labelClass}>{label}</span>
-      <div className="mt-2 flex flex-wrap items-center gap-3">
-        <button type="button" className={quietBtn} onClick={() => inputRef.current?.click()}>
-          Choose photo
-        </button>
-        <span className={fileName ? "text-sm font-semibold text-ink" : "text-sm text-ink-soft"}>
-          {fileName ?? "No photo chosen"}
-        </span>
-      </div>
+      {camera ? (
+        <div className="mt-2">
+          <CameraFrame onClose={() => setCamera(false)} onShot={keep} />
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <button type="button" className={primaryBtn} onClick={() => setCamera(true)}>
+            Take photo
+          </button>
+          <button type="button" className={quietBtn} onClick={() => inputRef.current?.click()}>
+            Choose a saved photo
+          </button>
+          <span className={fileName ? "text-sm font-semibold text-ink" : "text-sm text-ink-soft"}>
+            {fileName ?? "No photo chosen"}
+          </span>
+        </div>
+      )}
       <input
         ref={inputRef}
         className="sr-only"
         type="file"
         accept="image/*"
-        capture="environment"
         onChange={(event) => onFile(event.target.files?.[0]?.name ?? null)}
       />
     </div>
