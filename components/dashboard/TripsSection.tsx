@@ -473,11 +473,11 @@ export default function TripsSection({
 
       {ownDriverId ? null : <AdminLiveTrips trips={trips} />}
 
+      <Alert message={error} onClose={() => setError(null)} />
+
       {myLive ? (
         <DriverRoute trip={myLive} busy={saving} onProgress={(action) => progress(myLive, action)} />
       ) : null}
-
-      <Alert message={error} onClose={() => setError(null)} />
 
       {draft ? (
         <form ref={formRef} onSubmit={save} className="mt-4 grid gap-4 border-t border-ink/15 pt-4 sm:grid-cols-2">
@@ -1074,7 +1074,7 @@ function TripCard({
               {action.label}
             </button>
           ) : null}
-          {mine && trip.status === "started" ? (
+          {mine && (trip.status === "started" || trip.status === "loading" || trip.status === "in_transit") ? (
             <button
               type="button"
               className={quietBtn}

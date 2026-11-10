@@ -41,6 +41,7 @@ function notice(body: string) {
 export default function TripTracker({ tripId }: { tripId: string }) {
   const [off, setOff] = useState(false);
   const [asked, setAsked] = useState(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
   const [duty, setDuty] = useState<Duty | null>(null);
   const [restModal, setRestModal] = useState<string | null>(null);
   const [chosenAlert, setChosenAlert] = useState<NotificationPermission | null>(null);
@@ -48,7 +49,9 @@ export default function TripTracker({ tripId }: { tripId: string }) {
   const alerts = chosenAlert ?? liveAlert;
   const warned = useRef(new Set<string>());
   const warnedHoles = useRef(new Set<string>());
+  const driveErrorRef = useRef<string | null>(null);
   const [ahead, setAhead] = useState<string | null>(null);
+  const [driveModal, setDriveModal] = useState(false);
 
   const apply = useCallback((next: Duty) => {
     setDuty(next);
@@ -102,8 +105,20 @@ export default function TripTracker({ tripId }: { tripId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tripId, latitude, longitude }),
       });
-      const data = (await response.json().catch(() => null)) as Duty | null;
-      if (!response.ok || !data || stopped) return;
+      const data = (await response.json().catch(() => null)) as (Duty & { error?: string }) | null;
+      if (!response.ok) {
+        const message = data?.error ?? "";
+        if (!stopped && /sleep|still moving/i.test(message) && driveErrorRef.current !== message) {
+          driveErrorRef.current = message;
+          setDriveError(message);
+          setDriveModal(true);
+        }
+        return;
+      }
+      if (stopped || !data) return;
+      driveErrorRef.current = null;
+      setDriveError(null);
+      setDriveModal(false);
       apply(data);
     }
 
@@ -181,6 +196,12 @@ export default function TripTracker({ tripId }: { tripId: string }) {
 
   return (
     <>
+      {driveModal && driveError ? (
+        <Modal message={driveError} onConfirm={() => setDriveModal(false)} onCancel={() => setDriveModal(false)} />
+      ) : null}
+      {driveError ? (
+        <p className="mt-4 border-2 border-ink bg-accent-warm/40 px-3 py-2 text-sm font-extrabold text-ink">{driveError}</p>
+      ) : null}
       {ahead ? (
         <p className="mt-4 border-2 border-ink bg-accent-warm/40 px-3 py-2 text-sm font-extrabold text-ink">{ahead}</p>
       ) : null}

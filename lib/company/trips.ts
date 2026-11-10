@@ -6,6 +6,7 @@ import { metersBetween, pickupAwayMessage, STOP_RANGE_METERS, stopAwayMessage } 
 import { proofsForTrips } from "@/lib/company/proofs";
 import { costsForTrips, emptyTripCost } from "@/lib/company/trip-cost";
 import { assertTripPapers } from "@/lib/company/papers";
+import { assertAwake } from "@/lib/company/tracking";
 import { assertVehicleServices, releaseTripService } from "@/lib/company/services";
 import type { CustomerRecord, TripInput, TripRecord, TripStopInput, TripStopRecord } from "@/lib/company/types";
 import { LIVE_TRIP_STATUSES } from "@/lib/company/types";
@@ -16,8 +17,8 @@ const NEXT: Record<string, string[]> = {
   created: ["canceled"],
   assigned: ["started", "canceled"],
   started: ["loading", "assigned", "canceled"],
-  loading: ["in_transit", "canceled"],
-  in_transit: ["unloading", "canceled"],
+  loading: ["in_transit", "assigned", "canceled"],
+  in_transit: ["unloading", "assigned", "canceled"],
   unloading: ["completed", "canceled"],
   completed: ["closed"],
   closed: [],
@@ -417,6 +418,7 @@ export async function changeTripStatus(
 
     if (status === "started") {
       if (!trip.driver_id || !trip.vehicle_id) throw new Error("Choose a driver and a truck first");
+      await assertAwake(companyId, trip.driver_id);
       const stops = await client.query<{ kind: string; address: string | null; scheduled_at: Date | null }>(
         `SELECT kind, address, scheduled_at FROM trip_stops WHERE trip_id = $1 ORDER BY sequence ASC`,
         [tripId]
@@ -527,6 +529,7 @@ export async function changeTripStatus(
     }
 
     if (status === "in_transit") {
+      if (trip.driver_id) await assertAwake(companyId, trip.driver_id);
       const pickup = await client.query<{ n: number }>(
         `SELECT COUNT(*)::int AS n FROM trip_proofs WHERE trip_id = $1 AND kind = 'pickup'`,
         [tripId]

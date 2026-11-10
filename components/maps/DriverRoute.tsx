@@ -286,15 +286,15 @@ export default function DriverRoute({
           <p className="mt-2 text-sm text-muted">Allow location so the directions can start from where you are.</p>
         ) : null}
         <div className="mt-4 flex flex-wrap gap-2">
+          {trip.status === "started" || trip.status === "loading" || trip.status === "in_transit" ? (
+            <button type="button" className={quietBtn} disabled={busy} onClick={() => setDiscarding(true)}>
+              Discard and start again
+            </button>
+          ) : null}
           {trip.status === "started" ? (
-            <>
-              <button type="button" className={primaryBtn} disabled={busy} onClick={() => onProgress("loading")}>
-                Start loading
-              </button>
-              <button type="button" className={quietBtn} disabled={busy} onClick={() => setDiscarding(true)}>
-                Discard and start again
-              </button>
-            </>
+            <button type="button" className={primaryBtn} disabled={busy} onClick={() => onProgress("loading")}>
+              Start loading
+            </button>
           ) : null}
           {trip.status === "loading" ? (
             <button type="button" className={primaryBtn} disabled={busy || pickupPhotos < 2} onClick={() => onProgress("in_transit")}>

@@ -117,6 +117,19 @@ function payAmount(payType: string, rate: number | null, km: number, trips: numb
   return null;
 }
 
+const ASLEEP = "You are sleeping. You cannot drive until you wake up.";
+
+export async function assertAwake(companyId: string, driverId: string) {
+  const pool = getPool();
+  const open = await pool.query(
+    `SELECT 1 FROM hos_logs
+     WHERE company_id = $1 AND driver_id = $2 AND kind = 'sleep' AND ended_at IS NULL
+     LIMIT 1`,
+    [companyId, driverId]
+  );
+  if ((open.rowCount ?? 0) > 0) throw new Error(ASLEEP);
+}
+
 export async function recordLocation(
   companyId: string,
   driverId: string,
@@ -201,6 +214,7 @@ export async function recordLocation(
      WHERE company_id = $1 AND recorded_at < now() - ($2 || ' days')::interval`,
     [companyId, String(TRACK_KEEP_DAYS)]
   );
+  if (segment?.moving) await assertAwake(companyId, driverId);
   return dutyStatus(companyId, driverId, tripId, true);
 }
 
@@ -294,6 +308,10 @@ export async function setSleep(companyId: string, driverId: string, wake: boolea
      LIMIT 1`,
     [companyId, driverId]
   );
+  if (live.rows[0]) {
+    const motion = await driverMotion(companyId, driverId, live.rows[0].id);
+    if (motion.liveMoving) throw new Error("You cannot sleep while the truck is still moving.");
+  }
   await pool.query(
     `INSERT INTO hos_logs (company_id, driver_id, trip_id, kind, started_at)
      VALUES ($1, $2, $3, 'sleep', now())`,
