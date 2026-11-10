@@ -20,7 +20,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return updateSession(request);
+  const requestHeaders = new Headers(request.headers);
+  const section = request.nextUrl.searchParams.get("section");
+  const route = section
+    ? `${request.method} ${pathname}?section=${section}`
+    : `${request.method} ${pathname}`;
+  requestHeaders.set("x-transitiq-route", route);
+  requestHeaders.set("x-transitiq-id", crypto.randomUUID());
+  requestHeaders.set("x-transitiq-t0", String(Date.now()));
+  return updateSession(request, requestHeaders);
 }
 
 export const config = {

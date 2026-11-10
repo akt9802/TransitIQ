@@ -1,4 +1,5 @@
 import { Pool, type PoolConfig, type QueryResultRow } from "pg";
+import { attachQueryTiming } from "@/lib/db-timing";
 
 /**
  * Server-only Postgres pool. Set one of:
@@ -14,9 +15,12 @@ import { Pool, type PoolConfig, type QueryResultRow } from "pg";
  * must match Connect). Wrong region → FATAL tenant/user not found.
  */
 
+const POOL_REVISION = 7;
+
 const globalForPool = globalThis as unknown as {
   transitiqPgPool?: Pool;
   transitiqPgConn?: string;
+  transitiqPgRev?: number;
 };
 
 /** Supabase project ref from `https://xxxxx.supabase.co` */
@@ -128,18 +132,23 @@ function createPool(): Pool {
         : undefined,
   };
 
-  return new Pool(config);
+  return attachQueryTiming(new Pool(config));
 }
 
 /** Singleton pool (survives Next.js dev hot reload; rebuilt if the URI changes). */
 export function getPool(): Pool {
   const connectionString = resolveConnectionString();
-  if (!globalForPool.transitiqPgPool || globalForPool.transitiqPgConn !== connectionString) {
+  if (
+    !globalForPool.transitiqPgPool ||
+    globalForPool.transitiqPgConn !== connectionString ||
+    globalForPool.transitiqPgRev !== POOL_REVISION
+  ) {
     if (globalForPool.transitiqPgPool) {
       void globalForPool.transitiqPgPool.end().catch(() => undefined);
     }
     globalForPool.transitiqPgPool = createPool();
     globalForPool.transitiqPgConn = connectionString;
+    globalForPool.transitiqPgRev = POOL_REVISION;
   }
   return globalForPool.transitiqPgPool;
 }

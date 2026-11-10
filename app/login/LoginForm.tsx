@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { EyeIcon, EyeOffIcon } from "@/components/icons/Marks";
 import { Modal } from "@/components/Modal";
 import type { OtpPurpose } from "@/lib/auth/otp";
 
@@ -9,9 +10,10 @@ type Step = "email" | "otp" | "password" | "login" | "forgot";
 const fieldClass =
   "mt-2 w-full rounded-md border-2 border-ink bg-paper px-3 py-2 text-sm";
 const btnClass =
-  "w-full rounded-md border-2 border-ink bg-accent py-3 text-xs font-extrabold uppercase tracking-wider text-accent-ink shadow-[var(--shadow-brutal-sm)] disabled:opacity-50";
+  "w-full cursor-pointer rounded-md border-2 border-ink bg-accent py-3 text-xs font-extrabold uppercase tracking-wider text-accent-ink shadow-[var(--shadow-brutal-sm)] transition duration-150 hover:-translate-y-0.5 hover:bg-accent-hover hover:shadow-[var(--shadow-brutal)] active:translate-y-0 active:shadow-none disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50";
 const labelClass = "block text-xs font-bold uppercase tracking-wider text-muted";
-const linkClass = "font-bold text-accent underline decoration-2 underline-offset-2";
+const linkClass =
+  "cursor-pointer rounded px-1 font-bold text-accent underline decoration-2 underline-offset-2 transition hover:bg-accent-soft hover:text-accent-hover";
 
 function PasswordField({
   label,
@@ -49,8 +51,9 @@ function PasswordField({
           onClick={() => setVisible((open) => !open)}
           aria-pressed={visible}
           aria-label={visible ? "Hide password" : "Show password"}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold uppercase tracking-wider text-ink underline decoration-2 underline-offset-2"
+          className="absolute right-2 top-1/2 inline-flex -translate-y-1/2 cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-xs font-bold uppercase tracking-wider text-ink transition hover:bg-accent-soft hover:text-accent"
         >
+          {visible ? <EyeOffIcon /> : <EyeIcon />}
           {visible ? "Hide" : "Show"}
         </button>
       </div>

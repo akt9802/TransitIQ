@@ -1,4 +1,15 @@
 import Link from "next/link";
+import TruckLogo from "@/components/icons/TruckLogo";
+import {
+  AlertIcon,
+  BuildingIcon,
+  DropIcon,
+  PeopleIcon,
+  PersonIcon,
+  PulseIcon,
+  RouteIcon,
+  StarIcon,
+} from "@/components/icons/Marks";
 
 export type DashboardSection = "company" | "people" | "vehicles" | "drivers" | "trips" | "performance" | "fuel" | "points" | "roads";
 
@@ -16,6 +27,19 @@ type Props = {
   kicker?: string;
 };
 
+function SectionIcon({ section }: { section: DashboardSection }) {
+  const className = "h-4 w-4 shrink-0";
+  if (section === "company") return <BuildingIcon className={className} />;
+  if (section === "people") return <PeopleIcon className={className} />;
+  if (section === "vehicles") return <TruckLogo className={className} decorative />;
+  if (section === "drivers") return <PersonIcon className={className} />;
+  if (section === "trips") return <RouteIcon className={className} />;
+  if (section === "performance") return <PulseIcon className={className} />;
+  if (section === "fuel") return <DropIcon className={className} />;
+  if (section === "points") return <StarIcon className={className} />;
+  return <AlertIcon className={className} />;
+}
+
 export default function DashboardNav({ fleetName, active, items, kicker = "Fleet" }: Props) {
   return (
     <aside className="lg:sticky lg:top-24 lg:w-56 lg:shrink-0">
@@ -29,13 +53,16 @@ export default function DashboardNav({ fleetName, active, items, kicker = "Fleet
               key={item.section}
               href={item.href}
               aria-current={current ? "page" : undefined}
-              className={`flex shrink-0 items-center justify-between gap-3 rounded-md border-2 px-3 py-2.5 text-sm no-underline ${
+              className={`flex shrink-0 items-center justify-between gap-3 rounded-md border-2 px-3 py-2.5 text-sm no-underline transition duration-150 ${
                 current
                   ? "border-ink bg-ink font-extrabold text-paper"
-                  : "border-transparent text-ink hover:border-ink hover:bg-paper"
+                  : "border-transparent text-ink hover:border-ink hover:bg-accent-soft"
               }`}
             >
-              {item.label}
+              <span className="flex items-center gap-2">
+                <SectionIcon section={item.section} />
+                {item.label}
+              </span>
               {item.count != null ? (
                 <span className={current ? "text-paper" : "text-muted"}>{item.count}</span>
               ) : null}

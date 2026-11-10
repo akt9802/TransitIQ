@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { quietBtn } from "@/components/dashboard/styles";
 
 type Props = {
   className?: string;
@@ -25,8 +26,7 @@ export default function LogoutButton({ className }: Props) {
       onClick={logout}
       disabled={loading}
       className={
-        className ??
-        "rounded-md border-2 border-ink bg-paper px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-ink shadow-[var(--shadow-brutal-sm)] transition hover:-translate-y-0.5 hover:bg-paper-muted disabled:opacity-50"
+        className ?? quietBtn
       }
     >
       {loading ? "Signing out…" : "Log out"}

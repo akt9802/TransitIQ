@@ -8,7 +8,13 @@ import ScrollTruckProgress from "@/components/landing/ScrollTruckProgress";
 const SHELL = "mx-auto w-full max-w-7xl px-3 sm:px-4 md:px-5 lg:px-6";
 
 const BTN =
-  "rounded-md border-2 border-ink bg-paper px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-ink shadow-[var(--shadow-brutal-sm)] transition hover:-translate-y-0.5 hover:bg-paper-muted";
+  "rounded-md border-2 border-ink bg-paper px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-ink shadow-[var(--shadow-brutal-sm)] transition duration-150 hover:-translate-y-0.5 hover:bg-accent-soft hover:shadow-[var(--shadow-brutal)] active:translate-y-0 active:shadow-none";
+
+const NAV = [
+  { href: "/#offer", label: "Product" },
+  { href: "/#how", label: "How it works" },
+  { href: "/#pricing", label: "Pricing" },
+] as const;
 
 type Props = { email: string | null; name?: string | null };
 
@@ -31,7 +37,20 @@ export default function SiteHeader({ email, name }: Props) {
           </span>
           TransitIQ
         </a>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+          {isHome || isLogin ? (
+            <nav aria-label="Page" className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              {NAV.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="rounded px-1 text-xs font-extrabold uppercase tracking-wider text-ink no-underline transition hover:bg-accent-soft hover:text-accent"
+                >
+                  {item.label}
+                </a>
+              ))}
+            </nav>
+          ) : null}
           {email ? (
             <>
               {!isDashboard ? (

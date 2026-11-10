@@ -6,11 +6,11 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 /**
  * Refresh auth cookies on each request. Call from root `middleware.ts`.
+ * `requestHeaders` is forwarded so server code can read the route name.
  */
-export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
+export async function updateSession(request: NextRequest, requestHeaders?: Headers) {
+  const forwarded = requestHeaders ? { request: { headers: requestHeaders } } : { request };
+  let supabaseResponse = NextResponse.next(forwarded);
 
   if (!supabaseUrl || !supabaseKey) {
     return supabaseResponse;
@@ -25,9 +25,7 @@ export async function updateSession(request: NextRequest) {
         cookiesToSet.forEach(({ name, value }) =>
           request.cookies.set(name, value)
         );
-        supabaseResponse = NextResponse.next({
-          request,
-        });
+        supabaseResponse = NextResponse.next(forwarded);
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options)
         );

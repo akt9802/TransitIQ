@@ -147,13 +147,13 @@ export default function HomePage() {
               <div className="relative z-[1] mt-8 flex flex-wrap gap-3">
                 <a
                   href="#pricing"
-                  className="inline-flex items-center rounded-md border-2 border-ink bg-accent px-6 py-3 text-xs font-extrabold uppercase tracking-wider text-accent-ink shadow-[var(--shadow-brutal-sm)] transition hover:-translate-y-0.5 hover:bg-accent-hover hover:shadow-[var(--shadow-brutal-accent)]"
+                  className="inline-flex items-center rounded-md border-2 border-ink bg-accent px-6 py-3 text-xs font-extrabold uppercase tracking-wider text-accent-ink shadow-[var(--shadow-brutal-sm)] transition duration-150 hover:-translate-y-0.5 hover:bg-accent-hover hover:shadow-[var(--shadow-brutal-accent)] active:translate-y-0 active:shadow-none"
                 >
                   See pricing
                 </a>
                 <a
                   href="mailto:hello@transitiq.in"
-                  className="inline-flex items-center rounded-md border-2 border-ink bg-paper px-6 py-3 text-xs font-extrabold uppercase tracking-wider text-ink shadow-[var(--shadow-brutal-sm)] transition hover:-translate-y-0.5 hover:bg-paper-muted"
+                  className="inline-flex items-center rounded-md border-2 border-ink bg-paper px-6 py-3 text-xs font-extrabold uppercase tracking-wider text-ink shadow-[var(--shadow-brutal-sm)] transition duration-150 hover:-translate-y-0.5 hover:bg-accent-soft hover:shadow-[var(--shadow-brutal)] active:translate-y-0 active:shadow-none"
                 >
                   Talk to us
                 </a>
@@ -376,10 +376,10 @@ export default function HomePage() {
                   </ul>
                   <a
                     href="mailto:hello@transitiq.in?subject=TransitIQ%20—%20"
-                    className={`mt-10 block rounded-md border-2 border-ink py-3 text-center text-xs font-extrabold uppercase tracking-wider no-underline transition ${
+                    className={`mt-10 block rounded-md border-2 border-ink py-3 text-center text-xs font-extrabold uppercase tracking-wider no-underline transition duration-150 hover:-translate-y-0.5 active:translate-y-0 active:shadow-none ${
                       plan.featured
-                        ? "bg-paper text-ink shadow-[var(--shadow-brutal-sm)] hover:bg-paper-muted"
-                        : "bg-accent text-accent-ink shadow-[var(--shadow-brutal-sm)] hover:bg-accent-hover"
+                        ? "bg-paper text-ink shadow-[var(--shadow-brutal-sm)] hover:bg-accent-soft hover:shadow-[var(--shadow-brutal)]"
+                        : "bg-accent text-accent-ink shadow-[var(--shadow-brutal-sm)] hover:bg-accent-hover hover:shadow-[var(--shadow-brutal)]"
                     }`}
                   >
                     Contact
@@ -441,7 +441,7 @@ export default function HomePage() {
             </div>
             <a
               href="mailto:hello@transitiq.in"
-              className="inline-flex rounded-md border-2 border-paper bg-accent px-6 py-3 text-xs font-extrabold uppercase tracking-wider text-accent-ink shadow-[var(--shadow-brutal-sm)] transition hover:-translate-y-0.5 hover:bg-accent-hover"
+              className="inline-flex rounded-md border-2 border-paper bg-accent px-6 py-3 text-xs font-extrabold uppercase tracking-wider text-accent-ink shadow-[var(--shadow-brutal-sm)] transition duration-150 hover:-translate-y-0.5 hover:bg-accent-hover active:translate-y-0 active:shadow-none"
             >
               Email hello@transitiq.in
             </a>
@@ -459,13 +459,12 @@ export default function HomePage() {
             </span>
             TransitIQ
           </div>
-          <p className="max-w-md text-sm text-ink-soft">
-            © {new Date().getFullYear()} TransitIQ. Deeper product notes in{" "}
-            <code className="rounded border border-ink/15 bg-paper px-1.5 py-0.5 font-mono text-xs text-ink">
-              Docs/first.md
-            </code>
-            .
-          </p>
+          <p className="text-sm text-ink-soft">© {new Date().getFullYear()} TransitIQ</p>
+          <nav aria-label="Footer" className="flex flex-wrap gap-x-4 gap-y-2 text-sm font-bold">
+            <a href="#offer" className="rounded px-1 text-ink no-underline transition hover:bg-accent-soft hover:text-accent">Product</a>
+            <a href="#how" className="rounded px-1 text-ink no-underline transition hover:bg-accent-soft hover:text-accent">How it works</a>
+            <a href="#pricing" className="rounded px-1 text-ink no-underline transition hover:bg-accent-soft hover:text-accent">Pricing</a>
+          </nav>
         </div>
       </footer>
     </div>
