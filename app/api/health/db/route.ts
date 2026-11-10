@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { formatPgError, getPool } from "@/lib/db";
 
 /**
  * GET /api/health/db — returns Postgres connectivity (server-side only).
@@ -6,7 +7,6 @@ import { NextResponse } from "next/server";
  */
 export async function GET() {
   try {
-    const { formatPgError, getPool } = await import("@/lib/db");
     const pool = getPool();
     const {
       rows: [row],
