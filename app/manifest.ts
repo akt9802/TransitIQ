@@ -11,9 +11,9 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#f4f7fb",
     theme_color: "#2a5cda",
     icons: [
-      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: "/icons/truck-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/truck-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icons/truck-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }
