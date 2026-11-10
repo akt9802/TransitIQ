@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { PhotoView } from "@/components/PhotoView";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { jpegPhoto, readHere } from "@/components/dashboard/photo";
 import { Alert } from "@/components/dashboard/frame";
-import { fieldClass, labelClass, primaryBtn } from "@/components/dashboard/styles";
+import { fieldClass, labelClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
 import type { VehicleRecord } from "@/lib/company/types";
 
 type Timing = "before_trip" | "on_trip" | "after_trip" | "no_trip";
@@ -148,6 +148,8 @@ export default function FuelSection({
   const [totalExtra, setTotalExtra] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"fuel" | "cost" | null>(null);
+  const [fuelFile, setFuelFile] = useState<string | null>(null);
+  const [costFile, setCostFile] = useState<string | null>(null);
   const chosen = choices.find((trip) => trip.id === tripId) ?? null;
   const truckId = chosen?.vehicleId ?? vehicleId;
 
@@ -220,6 +222,7 @@ export default function FuelSection({
       setAmount("");
       setDetails("");
       if (fuelPhoto.current) fuelPhoto.current.value = "";
+      setFuelFile(null);
       await load();
       router.refresh();
     } catch (caught) {
@@ -261,6 +264,7 @@ export default function FuelSection({
       setCostAmount("");
       setCostDetails("");
       if (costPhoto.current) costPhoto.current.value = "";
+      setCostFile(null);
       await load();
       router.refresh();
     } catch (caught) {
@@ -318,10 +322,7 @@ export default function FuelSection({
               <span className={labelClass}>Pump and fuel type</span>
               <input className={fieldClass} value={details} onChange={(event) => setDetails(event.target.value)} maxLength={200} required />
             </label>
-            <label className="block">
-              <span className={labelClass}>Invoice photo</span>
-              <input ref={fuelPhoto} className={fieldClass} type="file" accept="image/*" capture="environment" required />
-            </label>
+            <PhotoPick label="Invoice photo" inputRef={fuelPhoto} fileName={fuelFile} onFile={setFuelFile} />
             <button className={primaryBtn} disabled={busy !== null} type="submit">
               {busy === "fuel" ? "Saving" : "Save fuel"}
             </button>
@@ -353,10 +354,7 @@ export default function FuelSection({
               <span className={labelClass}>What was done</span>
               <input className={fieldClass} value={costDetails} onChange={(event) => setCostDetails(event.target.value)} maxLength={200} required />
             </label>
-            <label className="block">
-              <span className={labelClass}>Bill photo</span>
-              <input ref={costPhoto} className={fieldClass} type="file" accept="image/*" capture="environment" required />
-            </label>
+            <PhotoPick label="Bill photo" inputRef={costPhoto} fileName={costFile} onFile={setCostFile} />
             <button className={primaryBtn} disabled={busy !== null} type="submit">
               {busy === "cost" ? "Saving" : "Save cost"}
             </button>
@@ -502,6 +500,40 @@ function Averages({ rows }: { rows: VehicleAverage[] }) {
   );
 }
 
+function PhotoPick({
+  label,
+  inputRef,
+  fileName,
+  onFile,
+}: {
+  label: string;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  fileName: string | null;
+  onFile: (name: string | null) => void;
+}) {
+  return (
+    <div>
+      <span className={labelClass}>{label}</span>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button type="button" className={quietBtn} onClick={() => inputRef.current?.click()}>
+          Choose photo
+        </button>
+        <span className={fileName ? "text-sm font-semibold text-ink" : "text-sm text-ink-soft"}>
+          {fileName ?? "No photo chosen"}
+        </span>
+      </div>
+      <input
+        ref={inputRef}
+        className="sr-only"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={(event) => onFile(event.target.files?.[0]?.name ?? null)}
+      />
+    </div>
+  );
+}
+
 function RecordList({
   title,
   empty,
@@ -528,7 +560,7 @@ function RecordList({
       {rows.map((row) => (
         <article key={row.id} className="flex gap-3 border-2 border-ink bg-paper p-3 shadow-[var(--shadow-brutal)]">
           <div className="relative h-16 w-16 shrink-0 border-2 border-ink">
-            <Image alt="" className="object-cover" fill sizes="64px" src={`/api/company/media/${row.kind}/${row.id}`} unoptimized />
+            <PhotoView src={`/api/company/media/${row.kind}/${row.id}`} alt={row.title} />
           </div>
           <div className="min-w-0">
             <p className="font-extrabold">{row.title}</p>

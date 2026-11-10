@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
+import { PhotoView } from "@/components/PhotoView";
 import CustomerMap from "@/components/track/CustomerMap";
 import type { CustomerTracking } from "@/lib/company/tracking-link";
 
@@ -114,13 +114,9 @@ export default function CustomerTrack({ token, initial }: { token: string; initi
           {view.proofs.map((proof) => (
             <figure key={proof.id} className="border-2 border-ink bg-paper">
               <div className="relative h-48 w-full">
-                <Image
-                  alt={proof.kind === "pickup" ? "Pickup photo" : "Delivery photo"}
-                  className="object-cover"
-                  fill
-                  sizes="(min-width: 640px) 50vw, 100vw"
+                <PhotoView
                   src={`/api/track/${token}/photo/${proof.id}`}
-                  unoptimized
+                  alt={proof.kind === "pickup" ? "Pickup photo" : "Delivery photo"}
                 />
               </div>
               <figcaption className="px-3 py-2 text-sm">

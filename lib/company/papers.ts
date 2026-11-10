@@ -27,6 +27,14 @@ export type PaperNotice = {
 
 const ACTIVE_DRIVER = new Set(["active", "on_leave"]);
 
+function driverHref(id: string, field: string) {
+  return `/dashboard?section=drivers&driver=${id}&field=${field}`;
+}
+
+function vehicleHref(id: string, field: string) {
+  return `/dashboard?section=vehicles&vehicle=${id}&field=${field}`;
+}
+
 export function assertActiveVehiclePapers(status: string, papers: VehiclePaperDraft[]) {
   if (status !== "active") return;
   const byKind = new Map(papers.map((paper) => [paper.kind, paper]));
@@ -192,7 +200,7 @@ export async function paperNotices(companyId: string, claim: boolean, now = new 
       key: `vehicle:${paper.id}`,
       expiresOn: paper.expires_on,
       days,
-      href: "/dashboard?section=vehicles",
+      href: vehicleHref(vehicle.id, paper.kind),
       text: `${name} ${paperLabel(paper.kind)} ${expiryPhrase(days, paper.expires_on)}. Update the date on the truck.`,
     });
   }
@@ -204,7 +212,7 @@ export async function paperNotices(companyId: string, claim: boolean, now = new 
       if (rows.some((row) => row.kind === kind && row.expiresOn)) continue;
       banner.push({
         key: `missing:${vehicle.id}:${kind}`,
-        href: "/dashboard?section=vehicles",
+        href: vehicleHref(vehicle.id, kind),
         days: null,
         text: `${vehicle.registration_number} ${paperLabel(kind)} is not added. Add the expiry before the next trip.`,
       });
@@ -212,7 +220,7 @@ export async function paperNotices(companyId: string, claim: boolean, now = new 
     if (!rows.some((row) => row.kind === "rc" && row.documentNumber?.trim())) {
       banner.push({
         key: `missing:${vehicle.id}:rc`,
-        href: "/dashboard?section=vehicles",
+        href: vehicleHref(vehicle.id, "rc"),
         days: null,
         text: `${vehicle.registration_number} RC is not added. Add the number before the next trip.`,
       });
@@ -227,14 +235,14 @@ export async function paperNotices(companyId: string, claim: boolean, now = new 
         key: `license:${driver.id}`,
         expiresOn: driver.license_expires_on,
         days,
-        href: "/dashboard?section=drivers",
+        href: driverHref(driver.id, "license"),
         text: `${driver.full_name}'s licence ${expiryPhrase(days, driver.license_expires_on)}. Update the date on the driver.`,
       });
     }
     if (ACTIVE_DRIVER.has(driver.status) && (!driver.license_expires_on || !licenceNumber)) {
       banner.push({
         key: `missing:license:${driver.id}`,
-        href: "/dashboard?section=drivers",
+        href: driverHref(driver.id, "license"),
         days: null,
         text: driver.license_expires_on
           ? `${driver.full_name}'s licence number is not added. Add it before the next trip.`
@@ -251,7 +259,7 @@ export async function paperNotices(companyId: string, claim: boolean, now = new 
       key: `driver-paper:${paper.id}`,
       expiresOn: paper.expires_on,
       days,
-      href: "/dashboard?section=drivers",
+      href: driverHref(driver.id, "papers"),
       text: `${driver.full_name}'s ${paperLabel(paper.kind)} ${expiryPhrase(days, paper.expires_on)}. Update the date on the driver.`,
     });
   }

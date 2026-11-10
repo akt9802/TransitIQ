@@ -16,13 +16,13 @@ export const metadata = {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ section?: string }>;
+  searchParams: Promise<{ section?: string; driver?: string; vehicle?: string; field?: string; service?: string; open?: string }>;
 }) {
   const session = await getSession();
   if (!session) {
     redirect("/login");
   }
-  const { section } = await searchParams;
+  const { section, driver, vehicle, field, service, open } = await searchParams;
 
   try {
     await ensureAuthSchema();
@@ -30,7 +30,7 @@ export default async function DashboardPage({
     if (!workspace) {
       return <DashboardError message="This account could not be loaded." />;
     }
-    return <OwnerDashboard workspace={workspace} section={section} />;
+    return <OwnerDashboard workspace={workspace} section={section} driver={driver} vehicle={vehicle} field={field} service={service} open={open} />;
   } catch (error) {
     console.error("dashboard", error);
     return <DashboardError message={formatPgError(error)} />;

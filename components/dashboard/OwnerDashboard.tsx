@@ -78,9 +78,19 @@ function requestedSection(value: string | undefined): DashboardSection | null {
 export default function OwnerDashboard({
   workspace,
   section,
+  driver,
+  vehicle,
+  field,
+  service,
+  open,
 }: {
   workspace: Workspace;
   section?: string;
+  driver?: string;
+  vehicle?: string;
+  field?: string;
+  service?: string;
+  open?: string;
 }) {
   const router = useRouter();
   const hasCompany = Boolean(workspace.company);
@@ -263,6 +273,10 @@ export default function OwnerDashboard({
           canWrite={workspace.permissions.includes("vehicles.write")}
           papers={workspace.vehiclePapers}
           services={workspace.services}
+          focusId={vehicle}
+          focusField={field}
+          focusService={service}
+          focusOpen={open}
         />
       ) : null}
 
@@ -272,6 +286,9 @@ export default function OwnerDashboard({
           people={workspace.people}
           papers={workspace.driverPapers}
           canWrite={workspace.permissions.includes("drivers.write")}
+          focusId={driver}
+          focusField={field}
+          focusOpen={open}
         />
       ) : null}
 

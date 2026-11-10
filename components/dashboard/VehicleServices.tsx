@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Alert, useFleetSave } from "@/components/dashboard/frame";
+import { useOpenRecord } from "@/components/dashboard/openRecord";
 import { fieldClass, labelClass, quietBtn } from "@/components/dashboard/styles";
 import { prettyDate } from "@/lib/company/paper-rules";
 import { currentKm } from "@/lib/company/service-rules";
@@ -24,17 +25,34 @@ export default function VehicleServices({
   odometerKm,
   trackedKm,
   canWrite,
+  focusId,
+  focusOpen,
 }: {
   vehicleId: string;
   services: ServiceView[];
   odometerKm: number | null;
   trackedKm: number;
   canWrite: boolean;
+  focusId?: string;
+  focusOpen?: string;
 }) {
   const { error, setError, saving, submit } = useFleetSave();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [reading, setReading] = useState("");
   const mine = services.filter((service) => service.vehicleId === vehicleId);
+  useOpenRecord(focusId ? `${focusId}:${focusOpen ?? ""}` : undefined, () => {
+    const service = mine.find((item) => item.id === focusId);
+    if (!service || !canWrite) return;
+    setError(null);
+    setDraft({
+      id: service.id,
+      name: service.name,
+      nextDueOn: service.nextDueOn ?? "",
+      nextDueKm: service.nextDueKm == null ? "" : String(service.nextDueKm),
+      everyDays: service.everyDays == null ? "" : String(service.everyDays),
+      everyKm: service.everyKm == null ? "" : String(service.everyKm),
+    });
+  });
   const now = currentKm(odometerKm, trackedKm);
 
   function body(next: Draft) {
@@ -49,7 +67,7 @@ export default function VehicleServices({
   }
 
   return (
-    <div className="mt-6 border-t border-ink/15 pt-4">
+    <div id="vehicle-services" className="mt-6 scroll-mt-24 border-t border-ink/15 pt-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-extrabold text-ink">Service</h2>
         {canWrite && !draft ? (

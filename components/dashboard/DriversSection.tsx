@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import PapersPanel from "@/components/dashboard/PapersPanel";
+import { scrollToField, useOpenRecord } from "@/components/dashboard/openRecord";
 import { Actions, Alert, Field, RemoveButton, SectionCard, useFleetSave } from "@/components/dashboard/frame";
 import { fieldClass, quietBtn } from "@/components/dashboard/styles";
 import {
@@ -76,14 +77,26 @@ export default function DriversSection({
   people,
   papers,
   canWrite,
+  focusId,
+  focusField,
+  focusOpen,
 }: {
   drivers: DriverRecord[];
   people: PersonRecord[];
   papers: PaperRecord[];
   canWrite: boolean;
+  focusId?: string;
+  focusField?: string;
+  focusOpen?: string;
 }) {
   const { error, setError, saving, submit } = useFleetSave();
   const [draft, setDraft] = useState<Draft | null>(null);
+  useOpenRecord(focusId ? `${focusId}:${focusField ?? ""}:${focusOpen ?? ""}` : undefined, () => {
+    const driver = drivers.find((item) => item.id === focusId);
+    if (!driver) return;
+    if (canWrite) setDraft(fromDriver(driver));
+    scrollToField(canWrite ? (focusField === "papers" ? "driver-papers" : "field-license") : `driver-row-${driver.id}`);
+  });
   const logins = people.filter((person) => person.roleKey === "driver");
 
   function set<K extends keyof Draft>(key: K, value: Draft[K]) {
@@ -128,7 +141,9 @@ export default function DriversSection({
           </Field>
           <Field label="Emergency contact"><input value={draft.emergencyName} onChange={(e) => set("emergencyName", e.target.value)} className={fieldClass} /></Field>
           <Field label="Emergency phone"><input value={draft.emergencyPhone} onChange={(e) => set("emergencyPhone", e.target.value)} className={fieldClass} inputMode="tel" /></Field>
-          <Field label="License number"><input required value={draft.licenseNumber} onChange={(e) => set("licenseNumber", e.target.value)} className={fieldClass} /></Field>
+          <div id="field-license" className="scroll-mt-24">
+            <Field label="License number"><input required value={draft.licenseNumber} onChange={(e) => set("licenseNumber", e.target.value)} className={fieldClass} /></Field>
+          </div>
           <Field label="License class"><input value={draft.licenseClass} onChange={(e) => set("licenseClass", e.target.value)} className={fieldClass} /></Field>
           <Field label="License expiry"><input required type="date" value={draft.licenseExpiresOn} onChange={(e) => set("licenseExpiresOn", e.target.value)} className={fieldClass} /></Field>
           <Field label="Endorsements"><input value={draft.licenseEndorsements} onChange={(e) => set("licenseEndorsements", e.target.value)} className={fieldClass} /></Field>
@@ -142,7 +157,9 @@ export default function DriversSection({
         </form>
       ) : null}
       {draft?.id ? (
-        <PapersPanel parentId={draft.id} rows={papers} kinds={DRIVER_DOC_KINDS} endpoint="/api/company/driver-documents" canWrite={canWrite} />
+        <div id="driver-papers" className="scroll-mt-24">
+          <PapersPanel parentId={draft.id} rows={papers} kinds={DRIVER_DOC_KINDS} endpoint="/api/company/driver-documents" canWrite={canWrite} />
+        </div>
       ) : null}
       {drivers.length === 0 ? <p className="mt-4 text-sm text-ink-soft">No drivers yet.</p> : (
         <div className="mt-4 overflow-x-auto">
@@ -157,7 +174,7 @@ export default function DriversSection({
             </thead>
             <tbody>
               {drivers.map((driver) => (
-                <tr key={driver.id} className="border-b border-ink/15">
+                <tr id={`driver-row-${driver.id}`} key={driver.id} className="scroll-mt-24 border-b border-ink/15">
                   <td className="py-3 pr-4">{driver.fullName}</td>
                   <td className="py-3 pr-4">{driver.phone}</td>
                   <td className="py-3 pr-4">{DRIVER_STATUSES.find((item) => item.key === driver.status)?.label ?? driver.status}</td>

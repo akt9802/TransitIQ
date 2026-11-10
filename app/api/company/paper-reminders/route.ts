@@ -20,7 +20,7 @@ export async function GET(req: Request) {
           .map((trip) => trip.vehicleId as string)
       )];
       const services = await serviceNotices(companyId, claim, vehicleIds, "/dashboard?section=trips");
-      return NextResponse.json(services);
+      return NextResponse.json(services, { headers: { "Cache-Control": "no-store" } });
     }
     const [papers, services] = await Promise.all([
       paperNotices(companyId, claim),
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     ]);
     const banner = [...papers.banner, ...services.banner].sort(byDays);
     const push = [...papers.push, ...services.push];
-    return NextResponse.json({ banner, push });
+    return NextResponse.json({ banner, push }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("GET /api/company/paper-reminders", error);
     return NextResponse.json({ error: formatPgError(error) }, { status: 500 });

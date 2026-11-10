@@ -325,6 +325,7 @@ export async function serviceNotices(
   }
   const { rows } = await pool.query<{
     id: string;
+    vehicle_id: string;
     name: string;
     registration_number: string;
     next_due_on: string | null;
@@ -332,7 +333,7 @@ export async function serviceNotices(
     odometer_km: string | null;
     tracked_km: string;
   }>(
-    `SELECT s.id, s.name, v.registration_number,
+    `SELECT s.id, s.vehicle_id, s.name, v.registration_number,
             to_char(s.next_due_on, 'YYYY-MM-DD') AS next_due_on, s.next_due_km::text,
             v.odometer_km::text, v.tracked_km::text
      FROM service_schedules s
@@ -341,7 +342,7 @@ export async function serviceNotices(
     params
   );
   const banner: PaperNotice[] = [];
-  const due: { key: string; dueOn: string; text: string; slot: string; days: number | null }[] = [];
+  const due: { key: string; dueOn: string; text: string; href: string; slot: string; days: number | null }[] = [];
   for (const row of rows) {
     const reading = currentKm(row.odometer_km == null ? null : Number(row.odometer_km), Number(row.tracked_km));
     const days = row.next_due_on ? daysUntil(row.next_due_on, today) : null;
@@ -358,13 +359,17 @@ export async function serviceNotices(
       skipTripId: null,
     }, days, left);
     if (!text) continue;
-    banner.push({ key: `service:${row.id}`, text, href, days: serviceIsDue(days, left) ? 0 : days });
+    const rowHref = href.includes("section=vehicles")
+      ? `${href}&vehicle=${row.vehicle_id}&field=service&service=${row.id}`
+      : href;
+    banner.push({ key: `service:${row.id}`, text, href: rowHref, days: serviceIsDue(days, left) ? 0 : days });
     const slot = servicePushSlot(days, left, clock);
     if (!slot) continue;
     due.push({
       key: `service:${row.id}:${row.next_due_on ?? "-"}:${row.next_due_km ?? "-"}`,
       dueOn: row.next_due_on ?? "2000-01-01",
       text,
+      href: rowHref,
       slot,
       days,
     });
@@ -382,7 +387,7 @@ export async function serviceNotices(
         [companyId, item.key, item.dueOn, item.slot, sentOn]
       );
       if ((inserted.rowCount ?? 0) > 0) {
-        push.push({ key: `${item.key}:${item.slot}:${sentOn}`, text: item.text, href, days: item.days });
+        push.push({ key: `${item.key}:${item.slot}:${sentOn}`, text: item.text, href: item.href, days: item.days });
       }
     }
   }

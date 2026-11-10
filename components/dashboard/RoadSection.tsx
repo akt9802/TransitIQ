@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PhotoView } from "@/components/PhotoView";
 import { Alert } from "@/components/dashboard/frame";
 import { readHere } from "@/components/dashboard/photo";
 import { fieldClass, labelClass, primaryBtn, quietBtn } from "@/components/dashboard/styles";
@@ -273,7 +273,7 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
           {reports.map((report) => (
             <li key={report.id} className="flex items-center gap-3 py-3">
               <span className="relative h-14 w-14 shrink-0 overflow-hidden border-2 border-ink">
-                <Image alt="" className="object-cover" fill sizes="56px" src={`/api/company/media/pothole/${report.id}`} unoptimized />
+                <PhotoView src={`/api/company/media/pothole/${report.id}`} alt={`${ISSUE_LABEL[report.kind]} photo`} />
               </span>
               <span className="text-sm text-ink">
                 {ISSUE_LABEL[report.kind]} · {when(report.reportedAt)} · {report.status === "pending" ? "Waiting for confirmation" : `${report.points} points`}
@@ -317,7 +317,7 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
           {waiting.map((spot) => (
             <li key={spot.id} className="flex flex-wrap items-center gap-3 py-3">
               <span className="relative h-14 w-14 shrink-0 overflow-hidden border-2 border-ink">
-                <Image alt="" className="object-cover" fill sizes="56px" src={`/api/company/media/pothole/${spot.photoId}`} unoptimized />
+                <PhotoView src={`/api/company/media/pothole/${spot.photoId}`} alt={`${ISSUE_LABEL[spot.kind]} photo`} />
               </span>
               <span className="min-w-0 flex-1 text-sm text-ink">
                 {who(spot)} · {when(spot.reportedAt)} · {place(spot)}
@@ -336,7 +336,7 @@ export default function RoadSection({ mine, linked }: { mine: boolean; linked: b
           {open.map((spot) => (
             <li key={spot.id} className="flex flex-wrap items-center gap-3 py-3">
               <span className="relative h-14 w-14 shrink-0 overflow-hidden border-2 border-ink">
-                <Image alt="" className="object-cover" fill sizes="56px" src={`/api/company/media/pothole/${spot.photoId}`} unoptimized />
+                <PhotoView src={`/api/company/media/pothole/${spot.photoId}`} alt={`${ISSUE_LABEL[spot.kind]} photo`} />
               </span>
               <span className="min-w-0 flex-1 text-sm text-ink">
                 {who(spot)} · {when(spot.reportedAt)} · {place(spot)}

@@ -27,6 +27,7 @@ export function useFleetSave() {
     try {
       const data = await send(url, method, body);
       router.refresh();
+      window.dispatchEvent(new Event("transitiq-reminders"));
       return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");

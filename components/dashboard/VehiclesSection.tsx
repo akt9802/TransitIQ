@@ -3,6 +3,7 @@
 import { cloneElement, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { Alert } from "@/components/dashboard/frame";
+import { scrollToField, useOpenRecord } from "@/components/dashboard/openRecord";
 import VehicleServices from "@/components/dashboard/VehicleServices";
 import { indiaToday, vehiclePaperLine } from "@/lib/company/paper-rules";
 import { currentKm, serviceSummary } from "@/lib/company/service-rules";
@@ -23,6 +24,10 @@ type Props = {
   canWrite: boolean;
   papers: PaperRecord[];
   services: ServiceView[];
+  focusId?: string;
+  focusField?: string;
+  focusService?: string;
+  focusOpen?: string;
 };
 
 type PaperDraft = { documentNumber: string; expiresOn: string };
@@ -162,9 +167,22 @@ function fieldForError(message: string): keyof Draft | null {
   return ERROR_FIELDS.find(([prefix]) => message.startsWith(prefix))?.[1] ?? null;
 }
 
-export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, papers, services }: Props) {
+export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, papers, services, focusId, focusField, focusService, focusOpen }: Props) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft | null>(null);
+  useOpenRecord(focusId ? `${focusId}:${focusField ?? ""}:${focusService ?? ""}:${focusOpen ?? ""}` : undefined, () => {
+    const vehicle = vehicles.find((item) => item.id === focusId);
+    if (!vehicle) return;
+    if (canWrite) setDraft(fromVehicle(vehicle, papers));
+    const target = !canWrite
+      ? `vehicle-row-${vehicle.id}`
+      : focusField === "service"
+        ? "vehicle-services"
+        : focusField
+          ? `field-${focusField}`
+          : "vehicle-form";
+    scrollToField(target);
+  });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const atLimit = vehicles.length >= vehicleLimit;
@@ -207,6 +225,7 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
       if (!res.ok) throw new Error(data.error ?? "Could not save");
       setDraft(null);
       router.refresh();
+      window.dispatchEvent(new Event("transitiq-reminders"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
     } finally {
@@ -241,7 +260,7 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
       <Alert message={error} onClose={() => setError(null)} />
 
       {draft ? (
-        <form onSubmit={save} className="mt-4 grid gap-4 border-t border-ink/15 pt-4 sm:grid-cols-2">
+        <form id="vehicle-form" onSubmit={save} className="mt-4 grid scroll-mt-24 gap-4 border-t border-ink/15 pt-4 sm:grid-cols-2">
           <Field label="Registration number" field="registrationNumber" errorField={errorField}>
             <input
               required
@@ -343,7 +362,7 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
                 const paper = draft.papers[item.key] ?? { documentNumber: "", expiresOn: "" };
                 const expiryRequired = EXPIRY_REQUIRED.has(item.key);
                 return (
-                  <div key={item.key} className="grid gap-3 border-2 border-ink p-3 sm:grid-cols-2">
+                  <div id={`field-${item.key}`} key={item.key} className="grid scroll-mt-24 gap-3 border-2 border-ink p-3 sm:grid-cols-2">
                     <label className={labelClass}>
                       {item.label} number
                       <input
@@ -391,6 +410,8 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
           odometerKm={vehicles.find((vehicle) => vehicle.id === draft.id)?.odometerKm ?? null}
           trackedKm={vehicles.find((vehicle) => vehicle.id === draft.id)?.trackedKm ?? 0}
           canWrite={canWrite}
+          focusId={focusService}
+          focusOpen={focusOpen}
         />
       ) : null}
       {vehicles.length === 0 ? (
@@ -411,7 +432,7 @@ export default function VehiclesSection({ vehicles, vehicleLimit, canWrite, pape
             </thead>
             <tbody>
               {vehicles.map((vehicle) => (
-                <tr key={vehicle.id} className="border-b border-ink/15">
+                <tr id={`vehicle-row-${vehicle.id}`} key={vehicle.id} className="scroll-mt-24 border-b border-ink/15">
                   <td className="py-3 pr-4 text-ink">
                     {vehicle.registrationNumber}
                     {serviceSummary(services.filter((service) => service.vehicleId === vehicle.id), currentKm(vehicle.odometerKm, vehicle.trackedKm), indiaToday()) ? (

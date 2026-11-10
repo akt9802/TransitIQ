@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useRef, useState } from "react";
+import { PhotoView } from "@/components/PhotoView";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/Modal";
 import { jpegPhoto, readHere } from "@/components/dashboard/photo";
@@ -36,15 +36,12 @@ export function ProofStrip({ proofs }: { proofs: TripProof[] }) {
             <ul className="mt-2 grid gap-3 sm:grid-cols-3">
               {photos.map((photo) => (
                 <li key={photo.id} className="border-2 border-ink bg-paper">
-                  <a href={`/api/company/media/proof/${photo.id}`} target="_blank" rel="noreferrer" className="relative block h-36">
-                    <Image
+                  <div className="relative block h-36">
+                    <PhotoView
                       src={`/api/company/media/proof/${photo.id}`}
                       alt={`${group.label} at ${place(photo)}`}
-                      fill
-                      unoptimized
-                      className="object-cover"
                     />
-                  </a>
+                  </div>
                   <p className="px-2 py-2 text-xs text-ink">
                     {when(photo.takenAt)}
                     <span className="mt-1 block text-muted">{place(photo)}</span>
@@ -108,12 +105,9 @@ export function ProofCapture({ tripId, kind, proofs }: { tripId: string; kind: "
           {photos.map((photo) => (
             <li key={photo.id} className="border-2 border-ink bg-paper">
               <span className="relative block h-28">
-                <Image
+                <PhotoView
                   src={`/api/company/media/proof/${photo.id}`}
                   alt={`${title} taken ${when(photo.takenAt)}`}
-                  fill
-                  unoptimized
-                  className="object-cover"
                 />
               </span>
               <p className="px-2 py-2 text-xs text-ink">

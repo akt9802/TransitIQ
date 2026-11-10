@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { quietBtn } from "@/components/dashboard/styles";
 
 type Notice = { key: string; text: string; href: string; days: number | null };
@@ -10,12 +11,13 @@ function permissionNow(): NotificationPermission | "missing" {
 }
 
 export default function PaperReminders() {
+  const router = useRouter();
   const [banner, setBanner] = useState<Notice[]>([]);
   const [permission, setPermission] = useState<NotificationPermission | "missing">("default");
   const urgent = banner.some((item) => item.days != null && item.days <= 6);
 
   const load = useCallback(async (claim: boolean) => {
-    const res = await fetch(`/api/company/paper-reminders${claim ? "?claim=1" : ""}`);
+    const res = await fetch(`/api/company/paper-reminders${claim ? "?claim=1" : ""}`, { cache: "no-store" });
     if (!res.ok) return;
     const data = (await res.json()) as { banner?: Notice[]; push?: Notice[] };
     setBanner(data.banner ?? []);
@@ -34,12 +36,15 @@ export default function PaperReminders() {
     void load(claim);
     const timer = window.setInterval(() => void load(permissionNow() === "granted"), 10 * 60 * 1000);
     const onFocus = () => void load(permissionNow() === "granted");
+    const onSaved = () => void load(permissionNow() === "granted");
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("transitiq-reminders", onSaved);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("transitiq-reminders", onSaved);
     };
   }, [load]);
 
@@ -73,7 +78,17 @@ export default function PaperReminders() {
       <ul className="mt-3 space-y-2">
         {banner.map((item) => (
           <li key={item.key} className="text-sm text-ink">
-            <a className="font-bold text-ink underline decoration-2 underline-offset-2" href={item.href}>
+            <a
+              className="-mx-1 inline-block rounded-sm px-1 font-bold text-ink underline decoration-2 underline-offset-2 hover:bg-accent-soft"
+              href={item.href}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                event.preventDefault();
+                const url = new URL(item.href, window.location.origin);
+                url.searchParams.set("open", String(Date.now()));
+                router.push(`${url.pathname}?${url.searchParams.toString()}`);
+              }}
+            >
               {item.text}
             </a>
           </li>
